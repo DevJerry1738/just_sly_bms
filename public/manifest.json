@@ -1,0 +1,55 @@
+{
+  "name": "Just Sly Business Suite",
+  "short_name": "Just Sly",
+  "description": "Enterprise multi-branch business management suite with offline-first capabilities.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/",
+      "description": "View operational dashboard"
+    },
+    {
+      "name": "Inventory",
+      "url": "/inventory",
+      "description": "Access stock ledger"
+    },
+    {
+      "name": "Sales",
+      "url": "/sales",
+      "description": "Retail point of sale"
+    }
+  ],
+  "prefer_related_applications": false
+}

@@ -1,0 +1,89 @@
+import { SyncQueueService } from "./sync-queue";
+import type { EntitySyncHandler, SyncResult } from "./types";
+
+export class SyncManager {
+  private static handlers = new Map<string, EntitySyncHandler>();
+  private static listeners = new Set<(event: string, data?: unknown) => void>();
+  private static isSyncing = false;
+
+  /**
+   * Registers a sync handler for a specific business entity (e.g. 'products', 'sales').
+   */
+  static registerHandler(entityType: string, handler: EntitySyncHandler): void {
+    this.handlers.set(entityType, handler);
+  }
+
+  /**
+   * Subscribes to sync events (start, progress, complete, error).
+   */
+  static subscribe(listener: (event: string, data?: unknown) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private static emit(event: string, data?: unknown): void {
+    this.listeners.forEach((listener) => listener(event, data));
+  }
+
+  /**
+   * Process all pending items in the SyncQueue.
+   */
+  static async processQueue(): Promise<SyncResult> {
+    if (this.isSyncing) {
+      return { success: true, syncedCount: 0, failedCount: 0 };
+    }
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return { success: false, syncedCount: 0, failedCount: 0, errors: [{ itemId: "net", error: "Offline" }] };
+    }
+
+    this.isSyncing = true;
+    this.emit("sync:start");
+
+    let syncedCount = 0;
+    let failedCount = 0;
+    const errors: Array<{ itemId: string; error: string }> = [];
+
+    try {
+      const items = await SyncQueueService.getPendingItems();
+
+      for (const item of items) {
+        const handler = this.handlers.get(item.entityType);
+
+        if (!handler) {
+          // If no handler registered yet, skip for future module handling
+          continue;
+        }
+
+        await SyncQueueService.updateStatus(item.id, "syncing");
+
+        try {
+          const res = await handler(item.operationType, item.payload);
+
+          if (res.success) {
+            syncedCount++;
+            await SyncQueueService.removeCompleted(item.id);
+            this.emit("sync:progress", { itemId: item.id, status: "completed" });
+          } else {
+            failedCount++;
+            const errMsg = res.error ?? "Unknown sync handler error";
+            errors.push({ itemId: item.id, error: errMsg });
+            await SyncQueueService.updateStatus(item.id, "failed", errMsg);
+            this.emit("sync:progress", { itemId: item.id, status: "failed", error: errMsg });
+          }
+        } catch (err: unknown) {
+          failedCount++;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          errors.push({ itemId: item.id, error: errMsg });
+          await SyncQueueService.updateStatus(item.id, "failed", errMsg);
+          this.emit("sync:progress", { itemId: item.id, status: "failed", error: errMsg });
+        }
+      }
+
+      this.emit("sync:complete", { syncedCount, failedCount });
+      return { success: failedCount === 0, syncedCount, failedCount, errors };
+    } finally {
+      this.isSyncing = false;
+    }
+  }
+}
