@@ -92,7 +92,7 @@ export function AppTopbar() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/settings" className="gap-2 text-xs">
+              <Link to="/profile" className="gap-2 text-xs">
                 <UserRound className="size-3.5" /> Profile
               </Link>
             </DropdownMenuItem>

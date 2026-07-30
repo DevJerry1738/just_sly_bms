@@ -6,6 +6,7 @@ import { OfflineBanner } from "@/components/offline/offline-banner";
 import { PWAUpdateToast } from "@/components/offline/pwa-update-toast";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SyncScheduler } from "@/services/sync/sync-scheduler";
+import "@/services/sync/user-profile-sync";
 
 export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {

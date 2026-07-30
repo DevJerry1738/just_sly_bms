@@ -1,4 +1,7 @@
 import { BaseRepository } from "./base.repository";
+import { OrganizationRepository } from "./organization.repository";
+import { UserPreferencesRepository } from "./user-preferences.repository";
+import { UserProfileRepository } from "./user-profile.repository";
 import {
   db,
   type ProductSchema,
@@ -60,3 +63,6 @@ export const salesRepository = new SalesRepository();
 export const ordersRepository = new OrdersRepository();
 export const customersRepository = new CustomersRepository();
 export const notificationsRepository = new NotificationsRepository();
+export const organizationRepository = new OrganizationRepository();
+export const userProfileRepository = new UserProfileRepository();
+export const userPreferencesRepository = new UserPreferencesRepository();

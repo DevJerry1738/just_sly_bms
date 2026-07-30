@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import logoNoBg from "@/assets/logo_no_bg.webp";
 
+import { ForgotPasswordDialog } from "@/features/auth/components/forgot-password-dialog";
+
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
@@ -31,9 +33,14 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false);
 
   async function handleSignIn(event: React.FormEvent) {
     event.preventDefault();
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      toast.error("Authentication unavailable offline. Please check your internet connection.");
+      return;
+    }
     setPending(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setPending(false);
@@ -46,6 +53,10 @@ function AuthPage() {
 
   async function handleSignUp(event: React.FormEvent) {
     event.preventDefault();
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      toast.error("Account creation requires an internet connection.");
+      return;
+    }
     setPending(true);
     const { error } = await supabase.auth.signUp({
       email,
@@ -64,6 +75,10 @@ function AuthPage() {
   }
 
   async function handleGoogle() {
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      toast.error("Google sign-in requires an internet connection.");
+      return;
+    }
     setPending(true);
     const result = await lovable.auth.signInWithOAuth("google", {
       redirect_uri: window.location.origin,
@@ -175,7 +190,16 @@ function AuthPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="signin-password" className="text-xs">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="signin-password" className="text-xs">Password</Label>
+                      <button
+                        type="button"
+                        onClick={() => setForgotPasswordOpen(true)}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
                     <Input
                       id="signin-password"
                       type="password"
@@ -239,6 +263,7 @@ function AuthPage() {
           </CardContent>
         </Card>
       </section>
+      <ForgotPasswordDialog open={forgotPasswordOpen} onOpenChange={setForgotPasswordOpen} />
     </main>
   );
 }

@@ -13,9 +13,14 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { APP_CONFIG } from "@/config/app";
 import { AuthProvider } from "@/providers/auth-provider";
+import { BranchProvider } from "@/providers/branch-provider";
 import { ThemeProvider, themeInitScript } from "@/providers/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuditLoggerService } from "@/services/audit/audit-logger";
+
+// Initialize audit log event subscriptions
+AuditLoggerService.initialize();
 
 function NotFoundComponent() {
   return (

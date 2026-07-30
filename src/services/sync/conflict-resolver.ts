@@ -46,8 +46,8 @@ export class ConflictResolver {
         return { resolvedRecord: localRecord, strategyUsed: "CLIENT_WINS" };
 
       case "TIMESTAMP_BASED": {
-        const localTime = (localRecord.updatedAt as number) || context.queueItem.timestamp;
-        const serverTime = (serverRecord.updatedAt as number) || 0;
+        const localTime = (localRecord.updatedAt as number) || (localRecord.updated_at as number) || context.queueItem.timestamp;
+        const serverTime = (serverRecord.updatedAt as number) || (serverRecord.updated_at as number) || 0;
         const winner = localTime >= serverTime ? localRecord : serverRecord;
         return { resolvedRecord: winner, strategyUsed: "TIMESTAMP_BASED" };
       }

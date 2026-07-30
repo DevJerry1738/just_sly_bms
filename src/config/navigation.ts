@@ -11,6 +11,7 @@ import {
   Bell,
   ScrollText,
   Settings,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,6 +60,7 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { title: "Notifications", url: "/notifications", icon: Bell },
       { title: "Audit Logs", url: "/audit-logs", icon: ScrollText, roles: ["admin"] },
+      { title: "Profile", url: "/profile", icon: UserRound },
       { title: "Settings", url: "/settings", icon: Settings },
     ],
   },

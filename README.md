@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Welcome to Just Sly Business Management Suite
 
 This project was initialized with [Lovable](https://lovable.dev) and refined with an enterprise design system.
@@ -23,3 +24,7 @@ npm run dev
 - Tailwind CSS v4 & OKLCH Token Design System
 - Supabase Integration
 - Inter Font & Lucide Icons
+=======
+# just_sly_bms
+Welcome to the **Just Sly Business Management Suite**, a modern, enterprise-grade platform built for unified operational control across retail branches, wholesale orders, inventory, and analytics.
+>>>>>>> origin/main

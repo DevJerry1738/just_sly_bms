@@ -52,13 +52,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     let active = true;
     void (async () => {
-      const [profileRes, rolesRes] = await Promise.all([
-        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", userId),
-      ]);
-      if (!active) return;
-      setProfile((profileRes.data as Profile | null) ?? null);
-      setRoles(((rolesRes.data ?? []) as { role: AppRole }[]).map((r) => r.role));
+      try {
+        const [profileRes, rolesRes] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+          supabase.from("user_roles").select("role").eq("user_id", userId),
+        ]);
+        if (!active) return;
+        setProfile((profileRes.data as Profile | null) ?? null);
+        setRoles(((rolesRes.data ?? []) as { role: AppRole }[]).map((r) => r.role));
+      } catch (err) {
+        console.warn("[auth-provider] Could not fetch remote profile/roles (offline mode):", err);
+      }
     })();
     return () => {
       active = false;
