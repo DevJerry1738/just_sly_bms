@@ -24,7 +24,8 @@ export function ReceiptSettingsForm({ initialData, onSaved }: ReceiptSettingsFor
   const [saving, setSaving] = useState(false);
 
   const form = useForm<ReceiptSettingsFormValues>({
-    resolver: zodResolver(receiptSettingsSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(receiptSettingsSchema) as any,
     defaultValues: {
       receipt_header: initialData.receipt_header || "Thank you for shopping with Just Sly!",
       receipt_footer: initialData.receipt_footer || "Goods sold in good condition are not returnable.",
@@ -159,9 +160,9 @@ export function ReceiptSettingsForm({ initialData, onSaved }: ReceiptSettingsFor
             )}
             <div className="text-center space-y-0.5 border-b border-dashed border-slate-300 pb-3 mb-3">
               <p className="font-bold text-xs uppercase tracking-tight">{initialData.name || "Just Sly Enterprise"}</p>
-              <p className="text-[10px] text-slate-600">{initialData.address || "123 Business Ave, Accra"}</p>
-              <p className="text-[10px] text-slate-600">TEL: {initialData.phone || "+233 24 000 0000"}</p>
-              <p className="text-[10px] text-slate-600">TIN: {initialData.tax_id || "TIN-98472910-GH"}</p>
+              <p className="text-[10px] text-slate-600">{initialData.address || "123 Business Ave, Lagos"}</p>
+              <p className="text-[10px] text-slate-600">TEL: {initialData.phone || "+234 1 700 0000"}</p>
+              <p className="text-[10px] text-slate-600">TIN: {initialData.tax_id || "TIN-98472910-NG"}</p>
               {watchHeader && <p className="text-[10px] italic pt-1 font-sans">{watchHeader}</p>}
             </div>
 
@@ -186,15 +187,15 @@ export function ReceiptSettingsForm({ initialData, onSaved }: ReceiptSettingsFor
             <div className="space-y-0.5 text-right font-bold border-b border-dashed border-slate-300 pb-3 mb-3">
               <div className="flex justify-between text-[10px] font-normal text-slate-600">
                 <span>Subtotal</span>
-                <span>GH₵ 230.00</span>
+                <span>₦ 230.00</span>
               </div>
               <div className="flex justify-between text-[10px] font-normal text-slate-600">
                 <span>VAT (15%)</span>
-                <span>GH₵ 34.50</span>
+                <span>₦ 34.50</span>
               </div>
               <div className="flex justify-between text-xs font-bold pt-1">
                 <span>TOTAL DUE</span>
-                <span>GH₵ 264.50</span>
+                <span>₦ 264.50</span>
               </div>
             </div>
 

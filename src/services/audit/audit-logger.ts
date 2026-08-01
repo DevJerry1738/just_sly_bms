@@ -34,14 +34,14 @@ export class AuditLoggerService {
 
     const auditEntry: AuditLogSchema = {
       id: crypto.randomUUID(),
-      userId: event.userId || payload.userId || "system",
-      userName: payload.userName || "System Admin",
-      branchId: event.branchId || payload.branchId,
-      entity: payload.entity || event.name.split("_")[0] || "SYSTEM",
-      entityId: payload.entityId || payload.id || "N/A",
+      userId: String(event.userId || payload["userId"] || "system"),
+      userName: String(payload["userName"] || "System Admin"),
+      branchId: event.branchId || String(payload["branchId"] || ""),
+      entity: String(payload["entity"] || event.name.split("_")[0] || "SYSTEM"),
+      entityId: String(payload["entityId"] || payload["id"] || "N/A"),
       action: event.name,
-      before: payload.before || null,
-      after: payload.after || payload.record || payload,
+      before: (payload["before"] as Record<string, unknown>) || null,
+      after: (payload["after"] || payload["record"] || payload) as Record<string, unknown>,
       metadata: {
         timestamp: event.timestamp,
         source: "domain_event_bus",

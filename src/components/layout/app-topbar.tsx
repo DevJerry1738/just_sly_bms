@@ -3,6 +3,7 @@ import { Bell, LogOut, Search, Settings, UserRound } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
 import { AppBreadcrumb } from "@/components/layout/app-breadcrumb";
+import { BranchSwitcher } from "@/components/layout/branch-switcher";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SyncStatusIndicator } from "@/components/offline/sync-status-indicator";
 import { PWAInstallButton } from "@/components/offline/pwa-install-button";
@@ -55,6 +56,7 @@ export function AppTopbar() {
 
         <SyncStatusIndicator />
         <PWAInstallButton />
+        <BranchSwitcher />
 
         <Button variant="ghost" size="icon-sm" className="relative" asChild>
           <Link to="/notifications" aria-label="Notifications">

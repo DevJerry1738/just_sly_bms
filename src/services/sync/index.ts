@@ -1,3 +1,6 @@
+import "./user-profile-sync";
+import "./entity-sync-handlers";
+
 export { SyncQueueService } from "./sync-queue";
 export { SyncManager } from "./sync-manager";
 export { SyncScheduler } from "./sync-scheduler";

@@ -2,7 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 
 import { NAVIGATION } from "@/config/navigation";
 import { APP_CONFIG } from "@/config/app";
-import { useAuth } from "@/providers/auth-provider";
+import { useAuthorization } from "@/hooks/use-authorization";
 import logoNoBg from "@/assets/logo_no_bg.webp";
 import {
   Sidebar,
@@ -22,11 +22,10 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { hasAnyRole, roles } = useAuth();
+  const { canAccessRoute } = useAuthorization();
 
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
-  const canSee = (allowed?: string[]) =>
-    !allowed?.length || roles.length === 0 || hasAnyRole(allowed as never);
+  const canSee = (requiredPermission?: string) => !requiredPermission || canAccessRoute(requiredPermission as any);
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
@@ -44,7 +43,7 @@ export function AppSidebar() {
 
       <SidebarContent className="gap-2 px-2 py-3 scrollbar-thin">
         {NAVIGATION.map((group) => {
-          const items = group.items.filter((item) => canSee(item.roles));
+          const items = group.items.filter((item) => canSee(item.requiredPermission));
           if (!items.length) return null;
           return (
             <SidebarGroup key={group.label} className="px-1 py-1">

@@ -7,6 +7,7 @@ export const staffSchema = z.object({
   email: z.string().email("Enter a valid email address"),
   phone: z.string().optional().or(z.literal("")),
   branchId: z.string().min(1, "Branch assignment is required"),
+  roleId: z.string().min(1, "Role assignment is required"),
   employmentId: z.string().optional().or(z.literal("")),
   onboardingMode: z.enum(["invite", "manual"]).default("manual"),
 });

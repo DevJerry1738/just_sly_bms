@@ -22,11 +22,12 @@ export function GeneralSettingsForm({ initialData, onSaved }: GeneralSettingsFor
   const [saving, setSaving] = useState(false);
 
   const form = useForm<GeneralSettingsFormValues>({
-    resolver: zodResolver(generalSettingsSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(generalSettingsSchema) as any,
     defaultValues: {
       name: initialData.name || "",
       email: initialData.email || "",
-      currency: initialData.currency || "GHS",
+      currency: initialData.currency || "NGN",
       timezone: initialData.timezone || "GMT",
       date_format: initialData.date_format || "DD/MM/YYYY",
     },
@@ -102,11 +103,11 @@ export function GeneralSettingsForm({ initialData, onSaved }: GeneralSettingsFor
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="GHS">GHS (₵)</SelectItem>
+                        <SelectItem value="NGN">NGN (₦)</SelectItem>
                         <SelectItem value="USD">USD ($)</SelectItem>
                         <SelectItem value="EUR">EUR (€)</SelectItem>
                         <SelectItem value="GBP">GBP (£)</SelectItem>
-                        <SelectItem value="NGN">NGN (₦)</SelectItem>
+                        <SelectItem value="GHS">GHS (₵)</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage className="text-[11px]" />

@@ -51,7 +51,7 @@ export function UserProfilePage() {
       return loadUserProfile(userId, {
         email: user?.email ?? "",
         displayName: user?.fullName ?? "",
-        role: authProfile?.role ?? "viewer",
+        role: (authProfile as any)?.role ?? "viewer",
       });
     },
     enabled: Boolean(userId),
@@ -71,7 +71,7 @@ export function UserProfilePage() {
   const profileMutation = useMutation({
     mutationFn: (values: UserProfileFormValues) => saveUserProfile(userId!, values),
     onSuccess: () => {
-      queryClient.invalidateQueries(queryKeys.auth.profile(userId ?? "guest"));
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.profile(userId ?? "guest") });
       toast.success("Profile updated successfully.");
     },
     onError: () => toast.error("Failed to save profile updates."),
@@ -80,7 +80,7 @@ export function UserProfilePage() {
   const preferencesMutation = useMutation({
     mutationFn: (values: UserPreferencesFormValues) => saveUserPreferences(userId!, values),
     onSuccess: () => {
-      queryClient.invalidateQueries(["userPreferences", userId]);
+      queryClient.invalidateQueries({ queryKey: ["userPreferences", userId] });
       toast.success("Preferences saved successfully.");
     },
     onError: () => toast.error("Failed to save preferences."),
@@ -91,7 +91,7 @@ export function UserProfilePage() {
       return uploadAvatar(userId!, file);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(queryKeys.auth.profile(userId ?? "guest"));
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.profile(userId ?? "guest") });
       toast.success("Avatar updated successfully.");
       setSelectedAvatar(null);
     },
@@ -104,7 +104,7 @@ export function UserProfilePage() {
   const removeAvatarMutation = useMutation({
     mutationFn: () => removeAvatar(userId!),
     onSuccess: () => {
-      queryClient.invalidateQueries(queryKeys.auth.profile(userId ?? "guest"));
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.profile(userId ?? "guest") });
       toast.success("Avatar removed successfully.");
     },
     onError: () => toast.error("Failed to remove avatar."),
@@ -122,7 +122,8 @@ export function UserProfilePage() {
   });
 
   const profileForm = useForm<UserProfileFormValues>({
-    resolver: zodResolver(userProfileSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(userProfileSchema) as any,
     defaultValues: {
       displayName: "",
       preferredName: "",
@@ -136,7 +137,8 @@ export function UserProfilePage() {
   });
 
   const securityForm = useForm<UserSecurityFormValues>({
-    resolver: zodResolver(userSecuritySchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(userSecuritySchema) as any,
     defaultValues: {
       currentPassword: "",
       newPassword: "",
@@ -145,7 +147,8 @@ export function UserProfilePage() {
   });
 
   const preferencesForm = useForm<UserPreferencesFormValues>({
-    resolver: zodResolver(userPreferencesSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(userPreferencesSchema) as any,
     defaultValues: {
       theme: theme,
       compactMode: false,
@@ -198,7 +201,7 @@ export function UserProfilePage() {
   const createdDate = profileQuery.data?.createdAt ? new Date(profileQuery.data.createdAt).toLocaleDateString() : "Not available";
 
   const profileStatus = profileQuery.data?.accountStatus ?? "active";
-  const role = profileQuery.data?.role ?? authProfile?.role ?? "viewer";
+  const role = (profileQuery.data as any)?.role ?? (authProfile as any)?.role ?? "viewer";
   const branch = profileQuery.data?.branch ?? "Global";
 
   const isOffline = status === "offline";
@@ -295,7 +298,7 @@ export function UserProfilePage() {
                   className="hidden"
                   onChange={(event) => onAvatarFileChange(event.target.files?.[0] ?? null)}
                 />
-                <Button variant="outline" size="sm" disabled={!profileQuery.data || removeAvatarMutation.isLoading} onClick={() => removeAvatarMutation.mutate()}>
+                <Button variant="outline" size="sm" disabled={!profileQuery.data || removeAvatarMutation.isPending} onClick={() => removeAvatarMutation.mutate()}>
                   Remove
                 </Button>
               </div>
@@ -482,8 +485,8 @@ export function UserProfilePage() {
                   </div>
 
                   <div className="flex items-center gap-3 pt-2">
-                    <Button type="submit" size="sm" disabled={!canEdit || profileMutation.isLoading}>
-                      {profileMutation.isLoading ? <Loader2 className="size-3.5 animate-spin" /> : "Save Profile"}
+                    <Button type="submit" size="sm" disabled={!canEdit || profileMutation.isPending}>
+                      {profileMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Save Profile"}
                     </Button>
                     {isOffline && <span className="text-xs text-amber-600">Changes will sync when you are online.</span>}
                   </div>
@@ -546,8 +549,8 @@ export function UserProfilePage() {
                     )}
                   />
                   <div className="flex items-center gap-3 pt-2">
-                    <Button type="submit" size="sm" disabled={passwordMutation.isLoading || isOffline}>
-                      {passwordMutation.isLoading ? <Loader2 className="size-3.5 animate-spin" /> : "Change Password"}
+                    <Button type="submit" size="sm" disabled={passwordMutation.isPending || isOffline}>
+                      {passwordMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Change Password"}
                     </Button>
                     {isOffline && <span className="text-xs text-amber-600">Password changes require online connectivity.</span>}
                   </div>
@@ -609,13 +612,13 @@ export function UserProfilePage() {
                     />
 
                     <FormField
-                      control={preferencesForm.control}
+                      control={profileForm.control}
                       name="dateFormat"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Date Format</FormLabel>
                           <FormControl>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} defaultValue={field.value as string}>
                               <SelectTrigger className="h-10 text-xs">
                                 <SelectValue placeholder="Select format" />
                               </SelectTrigger>
@@ -632,13 +635,13 @@ export function UserProfilePage() {
                     />
 
                     <FormField
-                      control={preferencesForm.control}
+                      control={profileForm.control}
                       name="timeFormat"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Time Format</FormLabel>
                           <FormControl>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} defaultValue={field.value as string}>
                               <SelectTrigger className="h-10 text-xs">
                                 <SelectValue placeholder="Select format" />
                               </SelectTrigger>
@@ -687,8 +690,8 @@ export function UserProfilePage() {
                   />
 
                   <div className="flex items-center gap-3 pt-2">
-                    <Button type="submit" size="sm" disabled={preferencesMutation.isLoading}>
-                      {preferencesMutation.isLoading ? <Loader2 className="size-3.5 animate-spin" /> : "Save Preferences"}
+                    <Button type="submit" size="sm" disabled={preferencesMutation.isPending}>
+                      {preferencesMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Save Preferences"}
                     </Button>
                     {isOffline && <span className="text-xs text-amber-600">Preference changes queue while offline.</span>}
                   </div>

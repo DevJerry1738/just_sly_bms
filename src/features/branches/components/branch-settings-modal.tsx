@@ -42,17 +42,18 @@ interface BranchSettingsModalProps {
   onSuccess: () => void;
 }
 
-const CURRENCIES = ["GHS", "USD", "EUR", "GBP", "NGN", "KES", "ZAR"];
-const TIMEZONES = ["GMT", "Africa/Accra", "Africa/Lagos", "Africa/Nairobi", "Africa/Johannesburg"];
+const CURRENCIES = ["NGN", "USD", "EUR", "GBP", "KES", "ZAR"];
+const TIMEZONES = ["Africa/Lagos", "GMT", "Africa/Nairobi", "Africa/Johannesburg"];
 
 export function BranchSettingsModal({ open, onOpenChange, branch, onSuccess }: BranchSettingsModalProps) {
   const form = useForm<BranchSettingsValues>({
-    resolver: zodResolver(branchSettingsSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(branchSettingsSchema) as any,
     defaultValues: {
       receiptPrefix: branch.receiptPrefix ?? "",
       lowStockThreshold: branch.lowStockThreshold ?? 10,
-      currency: branch.currency ?? "GHS",
-      timezone: branch.timezone ?? "GMT",
+      currency: branch.currency ?? "NGN",
+      timezone: branch.timezone ?? "Africa/Lagos",
     },
   });
 
@@ -61,8 +62,8 @@ export function BranchSettingsModal({ open, onOpenChange, branch, onSuccess }: B
       form.reset({
         receiptPrefix: branch.receiptPrefix ?? "",
         lowStockThreshold: branch.lowStockThreshold ?? 10,
-        currency: branch.currency ?? "GHS",
-        timezone: branch.timezone ?? "GMT",
+        currency: branch.currency ?? "NGN",
+        timezone: branch.timezone ?? "Africa/Lagos",
       });
     }
   }, [branch, form]);

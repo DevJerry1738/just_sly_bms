@@ -55,7 +55,7 @@ This document outlines the step-by-step procedures for manually testing and veri
 - **Steps**:
   1. Navigate to **Settings** (`/settings`) -> **General** tab.
   2. Update **Organization Display Name** to `"Just Sly West Africa Branch"`.
-  3. Select **Currency** = `GHS (₵)`, **Timezone** = `GMT`, **Date Format** = `DD/MM/YYYY`.
+  3. Select **Currency** = `NGN (₦)`, **Timezone** = `WAT`, **Date Format** = `DD/MM/YYYY`.
   4. Click **Save Changes**.
   5. Open DevTools -> **Application > IndexedDB > JustSlySuiteDB > organizations**.
   6. **Expected Result**: Record `default-org-001` shows updated name `"Just Sly West Africa Branch"` with `sync_status = "pending"`.
@@ -66,7 +66,7 @@ This document outlines the step-by-step procedures for manually testing and veri
 - **Steps**:
   1. Go to **Company Profile** tab.
   2. Enter:
-     - **Legal Name**: `Just Sly Business Solutions Ghana Ltd`
+     - **Legal Name**: `Just Sly Business Solutions Nigeria Ltd`
      - **Reg No**: `CS-9840210`
      - **Tax ID / TIN**: `TIN-1092840-GH`
   3. Click **Save Changes**.

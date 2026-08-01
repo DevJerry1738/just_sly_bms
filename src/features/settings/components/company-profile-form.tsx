@@ -21,7 +21,8 @@ export function CompanyProfileForm({ initialData, onSaved }: CompanyProfileFormP
   const [saving, setSaving] = useState(false);
 
   const form = useForm<CompanyProfileFormValues>({
-    resolver: zodResolver(companyProfileSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(companyProfileSchema) as any,
     defaultValues: {
       legal_name: initialData.legal_name || "",
       tax_id: initialData.tax_id || "",
@@ -94,7 +95,7 @@ export function CompanyProfileForm({ initialData, onSaved }: CompanyProfileFormP
                   <FormItem>
                     <FormLabel className="text-xs">Tax Identification (TIN / VAT)</FormLabel>
                     <FormControl>
-                      <Input {...field} className="h-8 text-xs" placeholder="TIN-98472910-GH" />
+                      <Input {...field} className="h-8 text-xs" placeholder="TIN-98472910-NG" />
                     </FormControl>
                     <FormMessage className="text-[11px]" />
                   </FormItem>
@@ -138,7 +139,7 @@ export function CompanyProfileForm({ initialData, onSaved }: CompanyProfileFormP
                   <FormItem>
                     <FormLabel className="text-xs">City / State</FormLabel>
                     <FormControl>
-                      <Input {...field} className="h-8 text-xs" placeholder="Accra" />
+                      <Input {...field} className="h-8 text-xs" placeholder="Lagos" />
                     </FormControl>
                     <FormMessage className="text-[11px]" />
                   </FormItem>
@@ -152,7 +153,7 @@ export function CompanyProfileForm({ initialData, onSaved }: CompanyProfileFormP
                   <FormItem>
                     <FormLabel className="text-xs">Country</FormLabel>
                     <FormControl>
-                      <Input {...field} className="h-8 text-xs" placeholder="Ghana" />
+                      <Input {...field} className="h-8 text-xs" placeholder="Nigeria" />
                     </FormControl>
                     <FormMessage className="text-[11px]" />
                   </FormItem>

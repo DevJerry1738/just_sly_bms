@@ -8,7 +8,7 @@ import { DomainEvents } from "@/services/events/domain-events";
 const ADJECTIVES = ["Swift", "Bold", "Keen", "Bright", "Sure", "Calm", "Firm", "Fair"];
 const NOUNS = ["Lion", "Eagle", "River", "Stone", "Star", "Cloud", "Forest", "Tide"];
 
-function generateTemporaryPassword(): string {
+export function generateTemporaryPassword(): string {
   const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
   const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
   const num = Math.floor(Math.random() * 9000) + 1000;
@@ -50,11 +50,12 @@ export class StaffRepository extends BaseRepository<StaffSchema> {
    */
   async createStaff(
     data: Partial<StaffSchema>,
-    mode: "invite" | "manual" = "manual"
+    mode: "invite" | "manual" = "manual",
+    tempPassword?: string,
   ): Promise<{ staff: StaffSchema; credentials: StaffCredentials | null }> {
     const count = (await this.getAll()).length;
     const employeeCode = data.employeeCode ?? generateEmployeeCode(count);
-    const tempPassword = mode === "manual" ? generateTemporaryPassword() : null;
+    const password = mode === "manual" ? tempPassword ?? generateTemporaryPassword() : null;
 
     const staff: StaffSchema = {
       id: data.id ?? crypto.randomUUID(),
@@ -66,6 +67,7 @@ export class StaffRepository extends BaseRepository<StaffSchema> {
       email: data.email ?? "",
       phone: data.phone,
       branchId: data.branchId ?? "",
+      roleId: data.roleId,
       status: "active",
       employmentId: data.employmentId,
       createdAt: Date.now(),
@@ -125,6 +127,12 @@ export class StaffRepository extends BaseRepository<StaffSchema> {
       temporaryPassword: tempPassword,
       loginNote: `A new temporary password has been generated for ${staff.firstName} ${staff.lastName}. Please deliver it securely.`,
     };
+  }
+
+  /** Delete a staff member locally and enqueue sync delete */
+  async deleteStaff(id: string): Promise<void> {
+    await this.delete(id);
+    await DomainEvents.publish("STAFF_DELETED" as any, { entity: "Staff", entityId: id });
   }
 }
 

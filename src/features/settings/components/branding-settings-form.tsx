@@ -31,7 +31,8 @@ export function BrandingSettingsForm({ initialData, onSaved }: BrandingSettingsF
   const [selectedLogo, setSelectedLogo] = useState<string>(initialData.logo_url || "no_bg");
 
   const form = useForm<BrandingSettingsFormValues>({
-    resolver: zodResolver(brandingSettingsSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(brandingSettingsSchema) as any,
     defaultValues: {
       logo_url: initialData.logo_url || "no_bg",
       primary_color: initialData.primary_color || "#0f172a",

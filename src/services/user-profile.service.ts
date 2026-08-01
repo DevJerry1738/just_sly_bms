@@ -59,7 +59,7 @@ export async function uploadAvatar(userId: string, file: File) {
 
   const { error: uploadError } = await supabase.storage.from(AVATAR_BUCKET).upload(storagePath, compressed, {
     cacheControl: "3600",
-    upsert: true,
+    upsert: false,
   });
 
   if (uploadError) {

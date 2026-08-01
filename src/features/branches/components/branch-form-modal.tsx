@@ -40,15 +40,16 @@ interface BranchFormModalProps {
   onSuccess: () => void;
 }
 
-const CURRENCIES = ["GHS", "USD", "EUR", "GBP", "NGN", "KES", "ZAR"];
-const TIMEZONES = ["GMT", "Africa/Accra", "Africa/Lagos", "Africa/Nairobi", "Africa/Johannesburg"];
-const COUNTRIES = ["Ghana", "Nigeria", "Kenya", "South Africa", "Côte d'Ivoire", "Uganda", "Tanzania"];
+const CURRENCIES = ["NGN", "USD", "EUR", "GBP", "KES", "ZAR"];
+const TIMEZONES = ["Africa/Lagos", "GMT", "Africa/Nairobi", "Africa/Johannesburg"];
+const COUNTRIES = ["Nigeria", "Kenya", "South Africa", "Côte d'Ivoire", "Uganda", "Tanzania"];
 
 export function BranchFormModal({ open, onOpenChange, branch, onSuccess }: BranchFormModalProps) {
   const isEdit = Boolean(branch);
 
   const form = useForm<BranchFormValues>({
-    resolver: zodResolver(branchSchema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(branchSchema) as any,
     defaultValues: {
       name: "",
       code: "",
@@ -57,9 +58,9 @@ export function BranchFormModal({ open, onOpenChange, branch, onSuccess }: Branc
       address: "",
       city: "",
       state: "",
-      country: "Ghana",
-      timezone: "GMT",
-      currency: "GHS",
+      country: "Nigeria",
+      timezone: "Africa/Lagos",
+      currency: "NGN",
       status: "active",
       managerId: "",
       openingDate: new Date().toISOString().split("T")[0],
@@ -77,9 +78,9 @@ export function BranchFormModal({ open, onOpenChange, branch, onSuccess }: Branc
         address: branch.address ?? "",
         city: branch.city ?? "",
         state: branch.state ?? "",
-        country: branch.country ?? "Ghana",
-        timezone: branch.timezone ?? "GMT",
-        currency: branch.currency ?? "GHS",
+        country: branch.country ?? "Nigeria",
+        timezone: branch.timezone ?? "Africa/Lagos",
+        currency: branch.currency ?? "NGN",
         status: branch.status,
         managerId: branch.managerId ?? "",
         openingDate: branch.openingDate ?? "",
@@ -133,7 +134,7 @@ export function BranchFormModal({ open, onOpenChange, branch, onSuccess }: Branc
                   <FormItem>
                     <FormLabel>Branch Name *</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. Accra Central Flagship" {...field} />
+                      <Input placeholder="e.g. Lagos Central Flagship" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -212,7 +213,7 @@ export function BranchFormModal({ open, onOpenChange, branch, onSuccess }: Branc
                   <FormItem>
                     <FormLabel>City *</FormLabel>
                     <FormControl>
-                      <Input placeholder="Accra" {...field} />
+                      <Input placeholder="Lagos" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -225,7 +226,7 @@ export function BranchFormModal({ open, onOpenChange, branch, onSuccess }: Branc
                   <FormItem>
                     <FormLabel>State / Region</FormLabel>
                     <FormControl>
-                      <Input placeholder="Greater Accra" {...field} />
+                      <Input placeholder="Lagos State" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

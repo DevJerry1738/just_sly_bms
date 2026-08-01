@@ -171,6 +171,7 @@ export interface StaffSchema {
   email: string;
   phone?: string;
   branchId: string;
+  roleId?: string;
   status: "active" | "suspended" | "deactivated";
   lastLogin?: number | null;
   employmentId?: string;

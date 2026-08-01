@@ -17,12 +17,14 @@ import {
 
 import type { AppRole } from "@/types/auth";
 
+import { type Permission } from "@/types/rbac";
+
 export interface NavItem {
   title: string;
   url: string;
   icon: LucideIcon;
-  /** Roles allowed to see the item. Empty = everyone signed in (RBAC lands in a later sprint). */
-  roles?: AppRole[];
+  /** Optional RBAC permission required to see the item. */
+  requiredPermission?: Permission;
 }
 
 export interface NavGroup {
@@ -34,34 +36,35 @@ export const NAVIGATION: NavGroup[] = [
   {
     label: "Overview",
     items: [
-      { title: "Dashboard", url: "/", icon: LayoutDashboard },
-      { title: "Analytics", url: "/analytics", icon: LineChart },
-      { title: "Reports", url: "/reports", icon: FileBarChart },
+      { title: "Dashboard", url: "/", icon: LayoutDashboard, requiredPermission: "dashboard:view" },
+      { title: "Analytics", url: "/analytics", icon: LineChart, requiredPermission: "reports:view" },
+      { title: "Reports", url: "/reports", icon: FileBarChart, requiredPermission: "reports:view" },
     ],
   },
   {
     label: "Operations",
     items: [
-      { title: "Branches", url: "/branches", icon: Building2 },
-      { title: "Products", url: "/products", icon: Package },
-      { title: "Inventory", url: "/inventory", icon: Boxes },
+      { title: "Branches", url: "/branches", icon: Building2, requiredPermission: "branches:view" },
+      { title: "Products", url: "/products", icon: Package, requiredPermission: "products:view" },
+      { title: "Inventory", url: "/inventory", icon: Boxes, requiredPermission: "inventory:view" },
     ],
   },
   {
     label: "Commerce",
     items: [
-      { title: "Sales", url: "/sales", icon: ShoppingCart },
-      { title: "Wholesale Orders", url: "/wholesale-orders", icon: Truck },
-      { title: "Customers", url: "/customers", icon: Users },
+      { title: "Sales", url: "/sales", icon: ShoppingCart, requiredPermission: "sales:view" },
+      { title: "Wholesale Orders", url: "/wholesale-orders", icon: Truck, requiredPermission: "sales:view" },
+      { title: "Customers", url: "/customers", icon: Users, requiredPermission: "customers:view" },
     ],
   },
   {
     label: "System",
     items: [
-      { title: "Notifications", url: "/notifications", icon: Bell },
-      { title: "Audit Logs", url: "/audit-logs", icon: ScrollText, roles: ["admin"] },
+      { title: "Notifications", url: "/notifications", icon: Bell, requiredPermission: "notifications:view" },
+      { title: "Audit Logs", url: "/audit-logs", icon: ScrollText, requiredPermission: "audit_logs:view" },
+      { title: "Users", url: "/users", icon: UserRound, requiredPermission: "staff:view" },
       { title: "Profile", url: "/profile", icon: UserRound },
-      { title: "Settings", url: "/settings", icon: Settings },
+      { title: "Settings", url: "/settings", icon: Settings, requiredPermission: "settings:view" },
     ],
   },
 ];
