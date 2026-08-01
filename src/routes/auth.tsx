@@ -17,9 +17,6 @@ import { ForgotPasswordDialog } from "@/features/auth/components/forgot-password
 import { SetPasswordPanel } from "@/features/auth/components/set-password-panel";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (search: Record<string, unknown>): { type?: string } => ({
-    type: typeof search.type === "string" ? search.type : undefined,
-  }),
   head: () => ({
     meta: [
       { title: "Sign in — Just Sly Business Management Suite" },
@@ -32,7 +29,6 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
-  const search = Route.useSearch();
   const navigate = useNavigate();
   const networkState = useNetworkStatus();
   const isOffline = networkState.status === "offline";
@@ -52,29 +48,44 @@ function AuthPage() {
   const [recoveryMode, setRecoveryMode] = useState<"invite" | "recovery">("invite");
 
   useEffect(() => {
+    const getUrlType = () => {
+      if (typeof window === "undefined") return undefined;
+      const params = new URLSearchParams(window.location.search);
+      const searchType = params.get("type");
+      if (searchType) return searchType;
+      if (window.location.hash.includes("type=recovery")) return "recovery";
+      if (window.location.hash.includes("type=invite")) return "invite";
+      return undefined;
+    };
+
+    const typeParam = getUrlType();
+
     // Detect hash tokens or recovery state from Supabase auth
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "PASSWORD_RECOVERY" || (session && (search.type === "invite" || search.type === "recovery"))) {
+      if (event === "PASSWORD_RECOVERY" || (session && (typeParam === "invite" || typeParam === "recovery"))) {
         setIsRecoverySession(true);
         setRecoveryEmail(session?.user?.email);
-        setRecoveryMode(search.type === "recovery" ? "recovery" : "invite");
+        setRecoveryMode(typeParam === "recovery" ? "recovery" : "invite");
       }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       const isInviteOrRecovery =
-        search.type === "invite" || search.type === "recovery" || window.location.hash.includes("type=invite") || window.location.hash.includes("type=recovery");
+        typeParam === "invite" ||
+        typeParam === "recovery" ||
+        (typeof window !== "undefined" &&
+          (window.location.hash.includes("type=invite") || window.location.hash.includes("type=recovery")));
       if (session && isInviteOrRecovery) {
         setIsRecoverySession(true);
         setRecoveryEmail(session.user.email);
-        setRecoveryMode(search.type === "recovery" ? "recovery" : "invite");
+        setRecoveryMode(typeParam === "recovery" ? "recovery" : "invite");
       }
     });
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [search.type]);
+  }, []);
 
   const environmentLabel = useMemo(
     () => import.meta.env.MODE?.toLowerCase() ?? "development",
