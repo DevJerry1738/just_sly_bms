@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Eye, EyeOff, ShieldCheck, Layers, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -14,8 +14,12 @@ import logoNoBg from "@/assets/logo_no_bg.webp";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 
 import { ForgotPasswordDialog } from "@/features/auth/components/forgot-password-dialog";
+import { SetPasswordPanel } from "@/features/auth/components/set-password-panel";
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: (search: Record<string, unknown>): { type?: string } => ({
+    type: typeof search.type === "string" ? search.type : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Sign in — Just Sly Business Management Suite" },
@@ -28,6 +32,7 @@ export const Route = createFileRoute("/auth")({
 });
 
 function AuthPage() {
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const networkState = useNetworkStatus();
   const isOffline = networkState.status === "offline";
@@ -41,6 +46,35 @@ function AuthPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [capsLockOn, setCapsLockOn] = useState(false);
+
+  const [isRecoverySession, setIsRecoverySession] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState<string | undefined>();
+  const [recoveryMode, setRecoveryMode] = useState<"invite" | "recovery">("invite");
+
+  useEffect(() => {
+    // Detect hash tokens or recovery state from Supabase auth
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" || (session && (search.type === "invite" || search.type === "recovery"))) {
+        setIsRecoverySession(true);
+        setRecoveryEmail(session?.user?.email);
+        setRecoveryMode(search.type === "recovery" ? "recovery" : "invite");
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const isInviteOrRecovery =
+        search.type === "invite" || search.type === "recovery" || window.location.hash.includes("type=invite") || window.location.hash.includes("type=recovery");
+      if (session && isInviteOrRecovery) {
+        setIsRecoverySession(true);
+        setRecoveryEmail(session.user.email);
+        setRecoveryMode(search.type === "recovery" ? "recovery" : "invite");
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [search.type]);
 
   const environmentLabel = useMemo(
     () => import.meta.env.MODE?.toLowerCase() ?? "development",
@@ -157,17 +191,21 @@ function AuthPage() {
             </div>
 
             <Card className="border border-border bg-card shadow-sm">
-              <CardHeader className="space-y-3 px-6 pt-6">
-                <div className="space-y-1">
-                  <CardTitle className="text-2xl font-semibold">Secure sign in</CardTitle>
-                  <CardDescription className="text-sm text-muted-foreground">
-                    Sign in to your {APP_CONFIG.name} workspace.
-                  </CardDescription>
-                </div>
-              </CardHeader>
+              {isRecoverySession ? (
+                <SetPasswordPanel mode={recoveryMode} userEmail={recoveryEmail} />
+              ) : (
+                <>
+                  <CardHeader className="space-y-3 px-6 pt-6">
+                    <div className="space-y-1">
+                      <CardTitle className="text-2xl font-semibold">Secure sign in</CardTitle>
+                      <CardDescription className="text-sm text-muted-foreground">
+                        Sign in to your {APP_CONFIG.name} workspace.
+                      </CardDescription>
+                    </div>
+                  </CardHeader>
 
-              <CardContent className="space-y-6 px-6 pb-6">
-                {isOffline ? (
+                  <CardContent className="space-y-6 px-6 pb-6">
+                    {isOffline ? (
                   <div className="rounded-xl border border-amber-200/80 bg-amber-50 p-4 text-sm text-amber-900">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 h-4 w-4" />
@@ -285,6 +323,8 @@ function AuthPage() {
                   Need help? Contact <a href={`mailto:${APP_CONFIG.supportEmail}`} className="text-primary hover:underline">{APP_CONFIG.supportEmail}</a>.
                 </p>
               </CardFooter>
+                </>
+              )}
             </Card>
 
             <div className="mt-6 text-center text-[11px] leading-5 text-muted-foreground">

@@ -40,8 +40,9 @@ const inviteStaffUser = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const inviteOptions: Record<string, unknown> = {};
-    if (data.redirectTo) inviteOptions.redirectTo = data.redirectTo;
+    const inviteOptions: Record<string, unknown> = {
+      redirectTo: data.redirectTo || `${process.env.APP_URL || "http://localhost:8080"}/auth?type=invite`,
+    };
     if (data.fullName) inviteOptions.data = { full_name: data.fullName };
 
     const { data: result, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(
