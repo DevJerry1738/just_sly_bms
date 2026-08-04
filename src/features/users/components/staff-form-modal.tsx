@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { createStaffUser, inviteStaffUser } from "../staff.functions";
 import { staffSchema, type StaffFormValues } from "../schemas/staff.schema";
+import type { AppRole } from "@/types/auth";
 import type { BranchSchema, RoleSchema, StaffSchema } from "@/database/schema";
 import { generateTemporaryPassword, staffRepository, type StaffCredentials } from "@/repositories/staff.repository";
 import { roleRepository } from "@/repositories/role.repository";
@@ -20,7 +21,7 @@ interface StaffFormModalProps {
   onOpenChange: (open: boolean) => void;
   branches: BranchSchema[];
   staff?: StaffSchema | null;
-  onSuccess: () => void;
+  onSuccess: (shouldClose?: boolean) => void;
 }
 
 export function StaffFormModal({ open, onOpenChange, branches, staff, onSuccess }: StaffFormModalProps) {
@@ -82,6 +83,21 @@ export function StaffFormModal({ open, onOpenChange, branches, staff, onSuccess 
     }
   }, [open, form]);
 
+  const mapRoleIdToAppRole = (roleId: string): AppRole => {
+    switch (roleId) {
+      case "role-super-admin":
+        return "admin";
+      case "role-branch-manager":
+        return "manager";
+      case "role-sales-staff":
+      case "role-inventory-staff":
+        return "staff";
+      case "role-viewer":
+      default:
+        return "viewer";
+    }
+  };
+
   const onSubmit = async (values: StaffFormValues) => {
     try {
       if (typeof window !== "undefined" && !navigator.onLine) {
@@ -111,6 +127,8 @@ export function StaffFormModal({ open, onOpenChange, branches, staff, onSuccess 
       let authUserId: string | undefined;
       let credentials: StaffCredentials | null = null;
 
+      const selectedAppRole = mapRoleIdToAppRole(values.roleId);
+
       if (values.onboardingMode === "manual") {
         const temporaryPassword = generateTemporaryPassword();
         const response = await createStaffUserFn({
@@ -118,6 +136,7 @@ export function StaffFormModal({ open, onOpenChange, branches, staff, onSuccess 
             email: values.email,
             password: temporaryPassword,
             fullName,
+            role: selectedAppRole,
           },
         });
         authUserId = response.authUserId;
@@ -134,6 +153,7 @@ export function StaffFormModal({ open, onOpenChange, branches, staff, onSuccess 
             email: values.email,
             fullName,
             redirectTo: `${window.location.origin}/auth?type=recovery`,
+            role: selectedAppRole,
           },
         });
         authUserId = response.authUserId;
@@ -148,7 +168,8 @@ export function StaffFormModal({ open, onOpenChange, branches, staff, onSuccess 
             ? "Manual login credentials are ready for this staff member. Share them securely."
             : `An invitation email has been sent to ${values.email}.`,
       });
-      onSuccess();
+      // Refresh the staff list. Keep the modal open when manual credentials are shown.
+      onSuccess(values.onboardingMode !== "manual");
     } catch (error) {
       console.error("[StaffFormModal] Save failed", error);
       toast.error(isEdit ? "Failed to update staff member." : "Failed to add staff member.");

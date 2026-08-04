@@ -93,6 +93,17 @@ export async function changePassword(currentPassword: string, newPassword: strin
     throw new Error("Password changes require an active internet connection.");
   }
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.email && currentPassword) {
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (signInErr) {
+      throw new Error("Incorrect current password. Please try again.");
+    }
+  }
+
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;
 

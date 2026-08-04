@@ -9,6 +9,7 @@ const createStaffUser = createServerFn({ method: "POST" })
       email: z.string().email(),
       password: z.string().min(8),
       fullName: z.string().optional(),
+      role: z.enum(["admin", "manager", "staff", "viewer"]).optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -25,6 +26,16 @@ const createStaffUser = createServerFn({ method: "POST" })
       throw new Error(error?.message ?? "Failed to create staff auth user.");
     }
 
+    if (data.role) {
+      const { error: roleError } = await supabaseAdmin
+        .from("user_roles")
+        .insert({ user_id: result.user.id, role: data.role });
+
+      if (roleError) {
+        console.warn("[createStaffUser] user_roles insert warning:", roleError.message);
+      }
+    }
+
     return { authUserId: result.user.id };
   });
 
@@ -35,6 +46,7 @@ const inviteStaffUser = createServerFn({ method: "POST" })
       email: z.string().email(),
       fullName: z.string().optional(),
       redirectTo: z.string().optional(),
+      role: z.enum(["admin", "manager", "staff", "viewer"]).optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -52,6 +64,16 @@ const inviteStaffUser = createServerFn({ method: "POST" })
 
     if (error || !result.user) {
       throw new Error(error?.message ?? "Failed to send invite email.");
+    }
+
+    if (data.role) {
+      const { error: roleError } = await supabaseAdmin
+        .from("user_roles")
+        .insert({ user_id: result.user.id, role: data.role });
+
+      if (roleError) {
+        console.warn("[inviteStaffUser] user_roles insert warning:", roleError.message);
+      }
     }
 
     return { authUserId: result.user.id };

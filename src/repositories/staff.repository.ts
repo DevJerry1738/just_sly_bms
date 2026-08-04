@@ -68,6 +68,7 @@ export class StaffRepository extends BaseRepository<StaffSchema> {
       phone: data.phone,
       branchId: data.branchId ?? "",
       roleId: data.roleId,
+      role: data.roleId || data.role || "role-viewer",
       status: "active",
       employmentId: data.employmentId,
       createdAt: Date.now(),
@@ -98,7 +99,14 @@ export class StaffRepository extends BaseRepository<StaffSchema> {
   /** Update staff details */
   async updateStaff(id: string, updates: Partial<StaffSchema>): Promise<StaffSchema> {
     const before = await this.getById(id);
-    const updated = await this.update(id, { ...updates, updatedAt: Date.now(), sync_status: "pending" });
+    const roleValue = (updates.roleId || updates.role) as string | undefined;
+    const patch: Partial<StaffSchema> = {
+      ...updates,
+      ...(roleValue ? { roleId: roleValue, role: roleValue } : {}),
+      updatedAt: Date.now(),
+      sync_status: "pending" as const,
+    };
+    const updated = await this.update(id, patch);
     await DomainEvents.publish("STAFF_UPDATED", { entity: "Staff", entityId: id, before, after: updated });
     return updated;
   }

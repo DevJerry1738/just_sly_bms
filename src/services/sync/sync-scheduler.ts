@@ -232,6 +232,7 @@ export class SyncScheduler {
             email: rs.email,
             phone: rs.phone || undefined,
             role: rs.role || "staff",
+            roleId: rs.role || "role-viewer",
             branchId: rs.branch_id || "branch-hq-lagos",
             status: (rs.status as any) || "active",
             hireDate: rs.hire_date || new Date().toISOString().split("T")[0],
@@ -241,6 +242,175 @@ export class SyncScheduler {
             sync_status: "synced" as const,
           };
           await db.staff.put(mapped);
+        }
+      }
+
+      // 3. Pull categories
+      const { data: remoteCategories, error: catErr } = await client.from("categories").select("*");
+      if (!catErr && remoteCategories) {
+        for (const rc of remoteCategories) {
+          await db.categories.put({
+            id: rc.id,
+            code: rc.code,
+            name: rc.name,
+            parentId: rc.parent_id || null,
+            description: rc.description || undefined,
+            status: rc.status || "active",
+            createdAt: rc.created_at ? new Date(rc.created_at).getTime() : Date.now(),
+            updatedAt: rc.updated_at ? new Date(rc.updated_at).getTime() : Date.now(),
+            sync_status: "synced" as const,
+          });
+        }
+      }
+
+      // 4. Pull products
+      const { data: remoteProducts, error: prodErr } = await client.from("products").select("*");
+      if (!prodErr && remoteProducts) {
+        for (const rp of remoteProducts) {
+          const existingProduct = await db.products.get(rp.id);
+          const preservedCode = existingProduct?.code || rp.code || rp.sku || rp.id;
+          await db.products.put({
+            id: rp.id,
+            code: preservedCode,
+            sku: rp.sku || existingProduct?.sku || undefined,
+            barcode: rp.barcode || existingProduct?.barcode || undefined,
+            name: rp.name || existingProduct?.name || "",
+            description: rp.description || existingProduct?.description || undefined,
+            categoryId: rp.category_id ?? existingProduct?.categoryId ?? null,
+            brand: rp.brand || existingProduct?.brand || undefined,
+            manufacturer: rp.manufacturer || existingProduct?.manufacturer || undefined,
+            baseUnit: rp.base_unit || existingProduct?.baseUnit || "Piece",
+            trackExpiry: rp.track_expiry ?? existingProduct?.trackExpiry ?? false,
+            lowStockThreshold: rp.low_stock_threshold ?? existingProduct?.lowStockThreshold ?? 0,
+            costPrice: Number(rp.cost_price ?? existingProduct?.costPrice ?? 0),
+            retailPrice: Number(
+              rp.selling_price ?? rp.retail_price ?? existingProduct?.retailPrice ?? 0
+            ),
+            wholesalePrice: Number(
+              rp.wholesale_price ?? existingProduct?.wholesalePrice ?? 0
+            ),
+            supplyPrice: Number(rp.supply_price ?? existingProduct?.supplyPrice ?? 0),
+            status: rp.status || existingProduct?.status || "active",
+            createdAt: rp.created_at ? new Date(rp.created_at).getTime() : existingProduct?.createdAt ?? Date.now(),
+            updatedAt: rp.updated_at ? new Date(rp.updated_at).getTime() : Date.now(),
+            sync_status: "synced" as const,
+          });
+        }
+      }
+
+      // 5. Pull product packaging
+      const { data: remotePackaging, error: pkgErr } = await client.from("product_packaging").select("*");
+      if (!pkgErr && remotePackaging) {
+        for (const rpkg of remotePackaging) {
+          await db.product_packaging.put({
+            id: rpkg.id,
+            productId: rpkg.product_id,
+            label: rpkg.label,
+            unitsPerPackage: Number(rpkg.units_per_package),
+            sortOrder: Number(rpkg.sort_order ?? 0),
+            createdAt: rpkg.created_at ? new Date(rpkg.created_at).getTime() : Date.now(),
+            updatedAt: rpkg.updated_at ? new Date(rpkg.updated_at).getTime() : Date.now(),
+            sync_status: "synced" as const,
+          });
+        }
+      }
+
+      // 6. Pull price history (append-only — only pull records we don't have)
+      const localPriceHistoryIds = new Set(
+        (await db.price_history.toArray()).map((h) => h.id)
+      );
+      const { data: remotePriceHistory, error: phErr } = await client
+        .from("price_history")
+        .select("*")
+        .order("timestamp", { ascending: false })
+        .limit(500);
+      if (!phErr && remotePriceHistory) {
+        for (const rph of remotePriceHistory) {
+          if (!localPriceHistoryIds.has(rph.id)) {
+            await db.price_history.put({
+              id: rph.id,
+              productId: rph.product_id,
+              priceType: rph.price_type,
+              previousPrice: Number(rph.previous_price),
+              newPrice: Number(rph.new_price),
+              changedBy: rph.changed_by || "system",
+              changedByName: rph.changed_by_name || undefined,
+              reason: rph.reason || undefined,
+              timestamp: rph.timestamp ? new Date(rph.timestamp).getTime() : Date.now(),
+              sync_status: "synced" as const,
+            });
+          }
+        }
+      }
+
+      // 7. Pull inventory balances
+      const { data: remoteBalances, error: balErr } = await client.from("inventory_balances").select("*");
+      if (!balErr && remoteBalances) {
+        for (const rb of remoteBalances) {
+          await db.inventory_balances.put({
+            id: rb.id,
+            productId: rb.product_id,
+            branchId: rb.branch_id,
+            quantityOnHand: Number(rb.quantity_on_hand ?? 0),
+            reservedQuantity: Number(rb.reserved_quantity ?? 0),
+            incomingQuantity: Number(rb.incoming_quantity ?? 0),
+            valuationMethod: rb.valuation_method || "fifo",
+            totalCostValue: Number(rb.total_cost_value ?? 0),
+            weightedAvgCost: Number(rb.weighted_avg_cost ?? 0),
+            lastTransactionId: rb.last_transaction_id || "",
+            updatedAt: rb.updated_at ? new Date(rb.updated_at).getTime() : Date.now(),
+            sync_status: "synced" as const,
+          });
+        }
+      }
+
+      // 8. Pull inventory batches
+      const { data: remoteBatches, error: batErr } = await client.from("inventory_batches").select("*");
+      if (!batErr && remoteBatches) {
+        for (const rbat of remoteBatches) {
+          await db.inventory_batches.put({
+            id: rbat.id,
+            batchNumber: rbat.batch_number,
+            productId: rbat.product_id,
+            branchId: rbat.branch_id,
+            quantityOnHand: Number(rbat.quantity_on_hand ?? 0),
+            initialQuantity: Number(rbat.initial_quantity ?? 0),
+            manufactureDate: rbat.manufacture_date || undefined,
+            expiryDate: rbat.expiry_date || undefined,
+            unitCost: Number(rbat.unit_cost ?? 0),
+            supplierId: rbat.supplier_id || null,
+            status: rbat.status || "active",
+            notes: rbat.notes || undefined,
+            createdBy: rbat.created_by,
+            createdAt: rbat.created_at ? new Date(rbat.created_at).getTime() : Date.now(),
+            updatedAt: rbat.updated_at ? new Date(rbat.updated_at).getTime() : Date.now(),
+            sync_status: "synced" as const,
+          });
+        }
+      }
+
+      // 9. Pull active inventory alerts
+      const { data: remoteAlerts, error: altErr } = await client.from("inventory_alerts").select("*").eq("acknowledged", false);
+      if (!altErr && remoteAlerts) {
+        for (const ralt of remoteAlerts) {
+          await db.inventory_alerts.put({
+            id: ralt.id,
+            type: ralt.type,
+            severity: ralt.severity,
+            productId: ralt.product_id,
+            branchId: ralt.branch_id,
+            batchId: ralt.batch_id || null,
+            message: ralt.message,
+            expiryDate: ralt.expiry_date || null,
+            daysRemaining: ralt.days_remaining ?? null,
+            quantityAffected: Number(ralt.quantity_affected ?? 0),
+            acknowledged: ralt.acknowledged ?? false,
+            acknowledgedBy: ralt.acknowledged_by || null,
+            acknowledgedAt: ralt.acknowledged_at ? new Date(ralt.acknowledged_at).getTime() : null,
+            createdAt: ralt.created_at ? new Date(ralt.created_at).getTime() : Date.now(),
+            updatedAt: ralt.updated_at ? new Date(ralt.updated_at).getTime() : Date.now(),
+            sync_status: "synced" as const,
+          });
         }
       }
     } catch (err) {

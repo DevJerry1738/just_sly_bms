@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { BranchSchema } from "@/database/schema";
-import { branchRepository } from "@/repositories/branch.repository";
+import { useAuth } from "@/providers/auth-provider";
+import { branchContextService, type BranchResolutionResult } from "@/services/branch/branch-context.service";
+import { SyncManager } from "@/services/sync/sync-manager";
 
 interface BranchContextValue {
   activeBranch: BranchSchema | null;
@@ -14,35 +16,49 @@ const BranchContext = createContext<BranchContextValue | null>(null);
 const STORAGE_KEY = "justsly.active_branch_id";
 
 export function BranchProvider({ children }: { children: ReactNode }) {
+  const { user, profile } = useAuth();
   const [branches, setBranches] = useState<BranchSchema[]>([]);
   const [activeBranch, setActiveBranch] = useState<BranchSchema | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [status, setStatus] = useState<BranchResolutionResult["status"]>("loading");
 
   const loadBranches = async () => {
-    try {
-      const list = await branchRepository.ensureSeedBranches();
-      setBranches(list);
-
-      const storedId = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
-      const found = list.find((b) => b.id === storedId) || list[0] || null;
-      setActiveBranch(found);
-    } catch (err) {
-      console.error("[BranchProvider] Error loading branches:", err);
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(true);
+    const result = await branchContextService.resolveForUser(user, profile);
+    setBranches(result.branches);
+    setActiveBranch(result.activeBranch);
+    setStatus(result.status);
+    setIsLoading(false);
   };
 
   useEffect(() => {
-    loadBranches();
+    void loadBranches();
+  }, [user?.id, user?.email, profile?.branch_id]);
+
+  useEffect(() => {
+    const unsubscribe = SyncManager.subscribe((event) => {
+      if (event === "sync:complete") {
+        void loadBranches();
+      }
+    });
+    return unsubscribe;
+  }, [user?.id, user?.email, profile?.branch_id]);
+
+  useEffect(() => {
+    const unsubscribe = branchContextService.subscribe((state) => {
+      setBranches(state.branches);
+      setActiveBranch(state.activeBranch);
+      setStatus(state.status);
+      setIsLoading(state.status === "loading");
+    });
+    return unsubscribe;
   }, []);
 
-  const setActiveBranchId = (id: string) => {
-    const target = branches.find((b) => b.id === id);
-    if (target) {
-      setActiveBranch(target);
-      localStorage.setItem(STORAGE_KEY, target.id);
-    }
+  const setActiveBranchId = async (id: string) => {
+    const result = await branchContextService.setActiveBranchId(id, branches);
+    setBranches(result.branches);
+    setActiveBranch(result.activeBranch);
+    setStatus(result.status);
   };
 
   const value = useMemo<BranchContextValue>(

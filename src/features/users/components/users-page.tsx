@@ -177,9 +177,11 @@ export function UsersPage() {
     }
   };
 
-  const handleSuccess = async () => {
-    setIsCreateOpen(false);
-    setEditingStaff(null);
+  const handleSuccess = async (shouldClose = true) => {
+    if (shouldClose) {
+      setIsCreateOpen(false);
+      setEditingStaff(null);
+    }
     await loadData();
   };
 
@@ -284,11 +286,15 @@ export function UsersPage() {
                   <tr key={member.id} className="border-t border-border/70 last:border-b">
                     <td className="px-6 py-4 align-top">
                       <div className="font-semibold text-foreground">{member.firstName} {member.lastName}</div>
-                      <div className="text-[11px] text-muted-foreground">{member.preferredName || "—"}</div>
+                      {member.preferredName ? (
+                        <div className="text-[11px] text-muted-foreground">{member.preferredName}</div>
+                      ) : null}
                     </td>
                     <td className="px-6 py-4 align-top text-sm text-muted-foreground">{member.email}</td>
                     <td className="px-6 py-4 align-top text-sm text-muted-foreground">{branch?.name ?? "Unassigned"}</td>
-                    <td className="px-6 py-4 align-top text-sm text-muted-foreground">{roles.find((role) => role.id === member.roleId)?.name ?? "Unassigned"}</td>
+                    <td className="px-6 py-4 align-top text-sm text-muted-foreground">
+                      {roles.find((role) => role.id === member.roleId || role.code === member.roleId || role.id === member.role || role.code === member.role)?.name ?? String(member.roleId ?? member.role ?? "Unassigned")}
+                    </td>
                     <td className="px-6 py-4 align-top text-sm text-muted-foreground">{member.employeeCode ?? "—"}</td>
                     <td className="px-6 py-4 align-top">
                       <Badge variant={member.status === "active" ? "secondary" : "outline"} className="rounded-full px-2 py-1 text-[11px] uppercase tracking-[.18em]">

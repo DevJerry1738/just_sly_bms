@@ -6,14 +6,18 @@ import { OfflineBanner } from "@/components/offline/offline-banner";
 import { PWAUpdateToast } from "@/components/offline/pwa-update-toast";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SyncScheduler } from "@/services/sync/sync-scheduler";
+import { syncReadinessService } from "@/services/sync/sync-readiness.service";
+import { useAuth } from "@/providers/auth-provider";
 import "@/services/sync/user-profile-sync";
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { user, profile } = useAuth();
+
   useEffect(() => {
-    // Start background sync scheduler
     SyncScheduler.start();
+    void syncReadinessService.bootstrapCriticalData(user, profile);
     return () => SyncScheduler.stop();
-  }, []);
+  }, [user?.id, profile?.branch_id]);
 
   return (
     <SidebarProvider>

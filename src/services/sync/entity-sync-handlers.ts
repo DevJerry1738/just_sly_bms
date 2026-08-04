@@ -72,7 +72,7 @@ SyncManager.registerHandler("staff", async (operationType, payload) => {
     last_name: payload["lastName"],
     email: payload["email"],
     phone: toCleanStringOrNull(payload["phone"]),
-    role: payload["role"] || "staff",
+    role: payload["roleId"] || payload["role"] || "staff",
     branch_id: toCleanStringOrNull(payload["branchId"]),
     status: payload["status"] || "active",
     hire_date: toCleanStringOrNull(payload["hireDate"]),
@@ -99,14 +99,17 @@ SyncManager.registerHandler("products", async (operationType, payload) => {
 
   const remoteRecord = {
     id: payload["id"],
-    sku: payload["sku"],
+    sku:
+      toCleanStringOrNull(payload["sku"]) ||
+      toCleanStringOrNull(payload["code"]) ||
+      (typeof payload["id"] === "string" ? payload["id"] : ""),
     name: payload["name"],
     description: toCleanStringOrNull(payload["description"]),
     category_id: toCleanStringOrNull(payload["categoryId"]),
     category_name: toCleanStringOrNull(payload["categoryName"]),
     unit: payload["unit"] || "pcs",
     cost_price: payload["costPrice"] ?? 0,
-    selling_price: payload["sellingPrice"] ?? 0,
+    selling_price: payload["sellingPrice"] ?? payload["retailPrice"] ?? 0,
     wholesale_price: payload["wholesalePrice"] ?? 0,
     min_order_quantity: payload["minOrderQuantity"] ?? 1,
     status: payload["status"] || "active",
@@ -122,7 +125,7 @@ SyncManager.registerHandler("products", async (operationType, payload) => {
   return { success: !error, error: error?.message };
 });
 
-// 4. Inventory Handler
+// 4. Inventory Handler (Stub legacy table)
 SyncManager.registerHandler("inventory", async (operationType, payload) => {
   if (operationType === "DELETE") {
     const id = payload["id"] as string;
@@ -144,105 +147,197 @@ SyncManager.registerHandler("inventory", async (operationType, payload) => {
   return { success: !error, error: error?.message };
 });
 
-// 5. Sales Handler
-SyncManager.registerHandler("sales", async (operationType, payload) => {
-  if (operationType === "DELETE") {
-    const id = payload["id"] as string;
-    const { error } = await client.from("sales").delete().eq("id", id);
-    return { success: !error, error: error?.message };
-  }
+// ---------------------------------------------------------------------------
+// Sprint 4 Handlers
+// ---------------------------------------------------------------------------
 
+// 5. Inventory Transactions Handler (Append-only)
+SyncManager.registerHandler("inventory_transactions", async (operationType, payload) => {
   const remoteRecord = {
     id: payload["id"],
-    receipt_number: payload["receiptNumber"],
+    type: payload["type"],
+    product_id: payload["productId"],
     branch_id: payload["branchId"],
-    cashier_id: toCleanUuidOrNull(payload["cashierId"]),
-    customer_id: toCleanStringOrNull(payload["customerId"]),
-    items: payload["items"] || [],
-    subtotal: payload["subtotal"] ?? 0,
-    tax: payload["tax"] ?? 0,
-    discount: payload["discount"] ?? 0,
-    total: payload["total"] ?? 0,
-    payment_method: payload["paymentMethod"] || "cash",
-    payment_status: payload["paymentStatus"] || "paid",
-    status: payload["status"] || "completed",
-    updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
-  };
-
-  const { error } = await client.from("sales").upsert(remoteRecord, { onConflict: "id" });
-  return { success: !error, error: error?.message };
-});
-
-// 6. Orders Handler
-SyncManager.registerHandler("orders", async (operationType, payload) => {
-  if (operationType === "DELETE") {
-    const id = payload["id"] as string;
-    const { error } = await client.from("orders").delete().eq("id", id);
-    return { success: !error, error: error?.message };
-  }
-
-  const remoteRecord = {
-    id: payload["id"],
-    order_number: payload["orderNumber"],
-    branch_id: payload["branchId"],
-    customer_id: toCleanStringOrNull(payload["customerId"]),
-    items: payload["items"] || [],
-    total_amount: payload["totalAmount"] ?? 0,
-    status: payload["status"] || "pending",
+    quantity: payload["quantity"],
+    base_unit: payload["baseUnit"],
+    unit_cost: payload["unitCost"],
+    reference_number: payload["referenceNumber"],
+    batch_id: toCleanStringOrNull(payload["batchId"]),
+    session_id: toCleanStringOrNull(payload["sessionId"]),
     notes: toCleanStringOrNull(payload["notes"]),
-    order_date: payload["orderDate"] ? new Date(Number(payload["orderDate"])).toISOString() : new Date().toISOString(),
-    expected_delivery_date: payload["expectedDeliveryDate"] ? new Date(Number(payload["expectedDeliveryDate"])).toISOString() : null,
+    performed_by: payload["performedBy"],
+    performed_by_name: toCleanStringOrNull(payload["performedByName"]),
+    timestamp: new Date(Number(payload["timestamp"] || Date.now())).toISOString(),
+  };
+
+  const { error } = await client.from("inventory_transactions").insert(remoteRecord);
+  if (!error || error.code === "23505") { // 23505 = duplicate primary key (idempotent)
+    await db.inventory_transactions.update(payload["id"] as string, { sync_status: "synced" });
+    return { success: true };
+  }
+  return { success: false, error: error?.message };
+});
+
+// 6. Inventory Balances Handler
+SyncManager.registerHandler("inventory_balances", async (operationType, payload) => {
+  const remoteRecord = {
+    id: payload["id"],
+    product_id: payload["productId"],
+    branch_id: payload["branchId"],
+    quantity_on_hand: payload["quantityOnHand"] ?? 0,
+    reserved_quantity: payload["reservedQuantity"] ?? 0,
+    incoming_quantity: payload["incomingQuantity"] ?? 0,
+    valuation_method: payload["valuationMethod"] || "fifo",
+    total_cost_value: payload["totalCostValue"] ?? 0,
+    weighted_avg_cost: payload["weightedAvgCost"] ?? 0,
+    last_transaction_id: payload["lastTransactionId"] || "",
     updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
   };
 
-  const { error } = await client.from("orders").upsert(remoteRecord, { onConflict: "id" });
+  const { error } = await client.from("inventory_balances").upsert(remoteRecord, { onConflict: "id" });
+  if (!error) {
+    await db.inventory_balances.update(payload["id"] as string, { sync_status: "synced" });
+  }
   return { success: !error, error: error?.message };
 });
 
-// 7. Customers Handler
-SyncManager.registerHandler("customers", async (operationType, payload) => {
+// 7. Inventory Batches Handler
+SyncManager.registerHandler("inventory_batches", async (operationType, payload) => {
   if (operationType === "DELETE") {
     const id = payload["id"] as string;
-    const { error } = await client.from("customers").delete().eq("id", id);
+    const { error } = await client.from("inventory_batches").delete().eq("id", id);
     return { success: !error, error: error?.message };
   }
 
   const remoteRecord = {
     id: payload["id"],
-    name: payload["name"],
-    company_name: toCleanStringOrNull(payload["companyName"]),
-    email: toCleanStringOrNull(payload["email"]),
-    phone: toCleanStringOrNull(payload["phone"]),
-    address: toCleanStringOrNull(payload["address"]),
-    type: payload["type"] || "retail",
-    credit_limit: payload["creditLimit"] ?? 0,
-    outstanding_balance: payload["outstandingBalance"] ?? 0,
+    batch_number: payload["batchNumber"],
+    product_id: payload["productId"],
+    branch_id: payload["branchId"],
+    quantity_on_hand: payload["quantityOnHand"] ?? 0,
+    initial_quantity: payload["initialQuantity"] ?? 0,
+    manufacture_date: toCleanStringOrNull(payload["manufactureDate"]),
+    expiry_date: toCleanStringOrNull(payload["expiryDate"]),
+    unit_cost: payload["unitCost"] ?? 0,
+    supplier_id: toCleanStringOrNull(payload["supplierId"]),
     status: payload["status"] || "active",
+    notes: toCleanStringOrNull(payload["notes"]),
+    created_by: payload["createdBy"],
     updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
   };
 
-  const { error } = await client.from("customers").upsert(remoteRecord, { onConflict: "id" });
+  const { error } = await client.from("inventory_batches").upsert(remoteRecord, { onConflict: "id" });
+  if (!error) {
+    await db.inventory_batches.update(payload["id"] as string, { sync_status: "synced" });
+  }
   return { success: !error, error: error?.message };
 });
 
-// 8. Organizations Handler
-SyncManager.registerHandler("organizations", async (operationType, payload) => {
-  if (operationType === "DELETE") {
-    const id = payload["id"] as string;
-    const { error } = await client.from("organizations").delete().eq("id", id);
-    return { success: !error, error: error?.message };
-  }
-
+// 8. Inventory Adjustments Handler (Append-only)
+SyncManager.registerHandler("inventory_adjustments", async (operationType, payload) => {
   const remoteRecord = {
     id: payload["id"],
-    name: payload["name"],
-    code: toCleanStringOrNull(payload["code"]),
-    tax_id: toCleanStringOrNull(payload["taxId"]),
-    currency: payload["currency"] || "NGN",
-    is_multi_branch_enabled: payload["isMultiBranchEnabled"] ?? true,
-    updated_at: new Date(Number(payload["updated_at"] || payload["updatedAt"] || Date.now())).toISOString(),
+    transaction_id: payload["transactionId"],
+    product_id: payload["productId"],
+    branch_id: payload["branchId"],
+    reason: payload["reason"],
+    notes: toCleanStringOrNull(payload["notes"]),
+    quantity_before: payload["quantityBefore"] ?? 0,
+    quantity_after: payload["quantityAfter"] ?? 0,
+    performed_by: payload["performedBy"],
+    performed_by_name: toCleanStringOrNull(payload["performedByName"]),
+    timestamp: new Date(Number(payload["timestamp"] || Date.now())).toISOString(),
   };
 
-  const { error } = await client.from("organizations").upsert(remoteRecord, { onConflict: "id" });
+  const { error } = await client.from("inventory_adjustments").insert(remoteRecord);
+  if (!error || error.code === "23505") {
+    await db.inventory_adjustments.update(payload["id"] as string, { sync_status: "synced" });
+    return { success: true };
+  }
+  return { success: false, error: error?.message };
+});
+
+// 9. Inventory Alerts Handler
+SyncManager.registerHandler("inventory_alerts", async (operationType, payload) => {
+  const remoteRecord = {
+    id: payload["id"],
+    type: payload["type"],
+    severity: payload["severity"],
+    product_id: payload["productId"],
+    branch_id: payload["branchId"],
+    batch_id: toCleanStringOrNull(payload["batchId"]),
+    message: payload["message"],
+    expiry_date: toCleanStringOrNull(payload["expiryDate"]),
+    days_remaining: payload["daysRemaining"] ?? null,
+    quantity_affected: payload["quantityAffected"] ?? 0,
+    acknowledged: payload["acknowledged"] ?? false,
+    acknowledged_by: toCleanStringOrNull(payload["acknowledgedBy"]),
+    acknowledged_at: payload["acknowledgedAt"] ? new Date(Number(payload["acknowledgedAt"])).toISOString() : null,
+    updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
+  };
+
+  const { error } = await client.from("inventory_alerts").upsert(remoteRecord, { onConflict: "id" });
+  if (!error) {
+    await db.inventory_alerts.update(payload["id"] as string, { sync_status: "synced" });
+  }
+  return { success: !error, error: error?.message };
+});
+
+// 10. Stock Count Sessions Handler
+SyncManager.registerHandler("stock_count_sessions", async (operationType, payload) => {
+  const remoteRecord = {
+    id: payload["id"],
+    session_number: payload["sessionNumber"],
+    branch_id: payload["branchId"],
+    status: payload["status"],
+    scope: payload["scope"] || "full",
+    snapshot_at: new Date(Number(payload["snapshotAt"] || Date.now())).toISOString(),
+    started_at: new Date(Number(payload["startedAt"] || Date.now())).toISOString(),
+    completed_at: payload["completedAt"] ? new Date(Number(payload["completedAt"])).toISOString() : null,
+    approved_at: payload["approvedAt"] ? new Date(Number(payload["approvedAt"])).toISOString() : null,
+    approved_by: toCleanStringOrNull(payload["approvedBy"]),
+    approved_by_name: toCleanStringOrNull(payload["approvedByName"]),
+    cancelled_at: payload["cancelledAt"] ? new Date(Number(payload["cancelledAt"])).toISOString() : null,
+    cancelled_by: toCleanStringOrNull(payload["cancelledBy"]),
+    notes: toCleanStringOrNull(payload["notes"]),
+    total_variance_value: payload["totalVarianceValue"] ?? 0,
+    created_by: payload["createdBy"],
+    created_by_name: toCleanStringOrNull(payload["createdByName"]),
+    updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
+  };
+
+  const { error } = await client.from("stock_count_sessions").upsert(remoteRecord, { onConflict: "id" });
+  if (!error) {
+    await db.stock_count_sessions.update(payload["id"] as string, { sync_status: "synced" });
+  }
+  return { success: !error, error: error?.message };
+});
+
+// 11. Stock Count Items Handler
+SyncManager.registerHandler("stock_count_items", async (operationType, payload) => {
+  const remoteRecord = {
+    id: payload["id"],
+    session_id: payload["sessionId"],
+    product_id: payload["productId"],
+    product_code: payload["productCode"],
+    product_name: payload["productName"],
+    base_unit: payload["baseUnit"],
+    batch_id: toCleanStringOrNull(payload["batchId"]),
+    batch_number: toCleanStringOrNull(payload["batchNumber"]),
+    expiry_date: toCleanStringOrNull(payload["expiryDate"]),
+    system_quantity: payload["systemQuantity"] ?? 0,
+    counted_quantity: payload["countedQuantity"] ?? null,
+    variance: payload["variance"] ?? null,
+    unit_cost: payload["unitCost"] ?? 0,
+    variance_value: payload["varianceValue"] ?? null,
+    notes: toCleanStringOrNull(payload["notes"]),
+    counted_by: toCleanStringOrNull(payload["countedBy"]),
+    counted_at: payload["countedAt"] ? new Date(Number(payload["countedAt"])).toISOString() : null,
+  };
+
+  const { error } = await client.from("stock_count_items").upsert(remoteRecord, { onConflict: "id" });
+  if (!error) {
+    await db.stock_count_items.update(payload["id"] as string, { sync_status: "synced" });
+  }
   return { success: !error, error: error?.message };
 });

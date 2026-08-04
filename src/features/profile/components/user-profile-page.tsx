@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, CheckCircle2, CreditCard, Lock, Loader2, User, Zap } from "lucide-react";
+import { Camera, CheckCircle2, CreditCard, Eye, EyeOff, Lock, Loader2, User, Zap } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { db } from "@/database/schema";
+import { staffRepository } from "@/repositories/staff.repository";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,6 +46,36 @@ export function UserProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("profile");
 
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const staffQuery = useQuery({
+    queryKey: ["currentStaffRecord", userId, user?.email],
+    queryFn: async () => {
+      if (!userId && !user?.email) return null;
+      const allStaff = await db.staff.toArray();
+      const staffMember = allStaff.find(
+        (s) => (userId && s.authUserId === userId) || (user?.email && s.email.toLowerCase() === user.email.toLowerCase())
+      );
+      if (!staffMember) return null;
+      const [allBranches, allRoles] = await Promise.all([
+        db.branches.toArray(),
+        db.roles.toArray(),
+      ]);
+      const branchRecord = allBranches.find((b) => b.id === staffMember.branchId);
+      const roleRecord = allRoles.find(
+        (r) => r.id === staffMember.roleId || r.code === staffMember.roleId || r.id === staffMember.role || r.code === staffMember.role
+      );
+      return {
+        staffMember,
+        branchName: branchRecord?.name ?? "Global",
+        roleName: roleRecord?.name ?? staffMember.roleId ?? staffMember.role ?? "Viewer",
+      };
+    },
+    enabled: Boolean(userId || user?.email),
+  });
+
   const profileQuery = useQuery({
     queryKey: queryKeys.auth.profile(userId ?? "guest"),
     queryFn: async () => {
@@ -69,9 +101,19 @@ export function UserProfilePage() {
   });
 
   const profileMutation = useMutation({
-    mutationFn: (values: UserProfileFormValues) => saveUserProfile(userId!, values),
+    mutationFn: async (values: UserProfileFormValues) => {
+      const updatedProfile = await saveUserProfile(userId!, values);
+      if (staffQuery.data?.staffMember) {
+        await staffRepository.updateStaff(staffQuery.data.staffMember.id, {
+          preferredName: values.preferredName || undefined,
+          phone: values.phone || undefined,
+        });
+      }
+      return updatedProfile;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.auth.profile(userId ?? "guest") });
+      queryClient.invalidateQueries({ queryKey: ["currentStaffRecord"] });
       toast.success("Profile updated successfully.");
     },
     onError: () => toast.error("Failed to save profile updates."),
@@ -111,9 +153,10 @@ export function UserProfilePage() {
   });
 
   const passwordMutation = useMutation({
-    mutationFn: ({ newPassword }: UserSecurityFormValues) => changePassword("", newPassword),
+    mutationFn: ({ currentPassword, newPassword }: UserSecurityFormValues) => changePassword(currentPassword, newPassword),
     onSuccess: () => {
       toast.success("Password changed successfully.");
+      securityForm.reset();
     },
     onError: (error) => {
       console.error(error);
@@ -201,8 +244,9 @@ export function UserProfilePage() {
   const createdDate = profileQuery.data?.createdAt ? new Date(profileQuery.data.createdAt).toLocaleDateString() : "Not available";
 
   const profileStatus = profileQuery.data?.accountStatus ?? "active";
-  const role = (profileQuery.data as any)?.role ?? (authProfile as any)?.role ?? "viewer";
-  const branch = profileQuery.data?.branch ?? "Global";
+  const role = staffQuery.data?.roleName ?? (profileQuery.data as any)?.role ?? (authProfile as any)?.role ?? "Viewer";
+  const branch = staffQuery.data?.branchName ?? profileQuery.data?.branch ?? "Global";
+  const preferredName = profileQuery.data?.preferredName || staffQuery.data?.staffMember?.preferredName || "—";
 
   const isOffline = status === "offline";
 
@@ -238,7 +282,7 @@ export function UserProfilePage() {
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Preferred Name</p>
-                <p className="text-sm font-medium">{profileQuery.data?.preferredName ?? "—"}</p>
+                <p className="text-sm font-medium">{preferredName}</p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Email</p>
@@ -516,7 +560,22 @@ export function UserProfilePage() {
                       <FormItem>
                         <FormLabel>Current Password</FormLabel>
                         <FormControl>
-                          <Input {...field} type="password" className="h-10 text-xs" autoComplete="current-password" />
+                          <div className="relative">
+                            <Input
+                              {...field}
+                              type={showCurrentPassword ? "text" : "password"}
+                              className="h-10 pr-10 text-xs"
+                              autoComplete="current-password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowCurrentPassword((prev) => !prev)}
+                              className="absolute inset-y-0 right-3 inline-flex items-center text-muted-foreground hover:text-foreground"
+                              aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                            >
+                              {showCurrentPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </button>
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -529,7 +588,22 @@ export function UserProfilePage() {
                       <FormItem>
                         <FormLabel>New Password</FormLabel>
                         <FormControl>
-                          <Input {...field} type="password" className="h-10 text-xs" autoComplete="new-password" />
+                          <div className="relative">
+                            <Input
+                              {...field}
+                              type={showNewPassword ? "text" : "password"}
+                              className="h-10 pr-10 text-xs"
+                              autoComplete="new-password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewPassword((prev) => !prev)}
+                              className="absolute inset-y-0 right-3 inline-flex items-center text-muted-foreground hover:text-foreground"
+                              aria-label={showNewPassword ? "Hide password" : "Show password"}
+                            >
+                              {showNewPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </button>
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -542,7 +616,22 @@ export function UserProfilePage() {
                       <FormItem>
                         <FormLabel>Confirm New Password</FormLabel>
                         <FormControl>
-                          <Input {...field} type="password" className="h-10 text-xs" autoComplete="new-password" />
+                          <div className="relative">
+                            <Input
+                              {...field}
+                              type={showConfirmPassword ? "text" : "password"}
+                              className="h-10 pr-10 text-xs"
+                              autoComplete="new-password"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowConfirmPassword((prev) => !prev)}
+                              className="absolute inset-y-0 right-3 inline-flex items-center text-muted-foreground hover:text-foreground"
+                              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                            >
+                              {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                            </button>
+                          </div>
                         </FormControl>
                         <FormMessage />
                       </FormItem>

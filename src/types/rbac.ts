@@ -37,7 +37,25 @@ export type PermissionAction =
 // ---------------------------------------------------------------------------
 // Canonical permission key: "resource:action" (e.g. "branches:create")
 // ---------------------------------------------------------------------------
-export type Permission = `${PermissionCategory}:${PermissionAction}`;
+
+// Extended product permissions use a dot-notation sub-action convention:
+// "products:view_cost" and "products:edit_cost" are treated as product
+// sub-permissions gated to Super Admin only.
+export type Permission =
+  | `${PermissionCategory}:${PermissionAction}`
+  | "products:view_cost"
+  | "products:edit_cost"
+  | "products:import"
+  | "categories:manage"
+  | "pricing:view"
+  | "pricing:edit"
+  | "inventory:view_cost"
+  | "inventory:adjust"
+  | "inventory:opening_stock"
+  | "inventory:stock_count"
+  | "inventory:export"
+  | "inventory:manage_batches"
+  | "inventory:acknowledge_alerts";
 
 // ---------------------------------------------------------------------------
 // Built-in system role codes (cannot be deleted)
@@ -73,6 +91,12 @@ export const ROLE_PERMISSIONS: Record<SystemRoleCode, Permission[]> = {
     "products:update",
     "products:delete",
     "products:manage",
+    "products:view_cost",
+    "products:edit_cost",
+    "products:import",
+    "categories:manage",
+    "pricing:view",
+    "pricing:edit",
     "inventory:view",
     "inventory:create",
     "inventory:update",
@@ -110,6 +134,10 @@ export const ROLE_PERMISSIONS: Record<SystemRoleCode, Permission[]> = {
     "products:view",
     "products:create",
     "products:update",
+    "products:import",
+    "categories:manage",
+    "pricing:view",
+    "pricing:edit",
     "inventory:view",
     "inventory:create",
     "inventory:update",
@@ -147,6 +175,7 @@ export const ROLE_PERMISSIONS: Record<SystemRoleCode, Permission[]> = {
     "products:view",
     "products:create",
     "products:update",
+    "pricing:view",
     "inventory:view",
     "inventory:create",
     "inventory:update",

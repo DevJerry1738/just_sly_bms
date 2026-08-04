@@ -1,7 +1,8 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Bell, LogOut, Search, Settings, UserRound } from "lucide-react";
 
 import { useAuth } from "@/providers/auth-provider";
+import { cn } from "@/lib/utils";
 import { AppBreadcrumb } from "@/components/layout/app-breadcrumb";
 import { BranchSwitcher } from "@/components/layout/branch-switcher";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -9,7 +10,7 @@ import { SyncStatusIndicator } from "@/components/offline/sync-status-indicator"
 import { PWAInstallButton } from "@/components/offline/pwa-install-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -34,6 +35,7 @@ function initials(name: string | null, email: string | null) {
 
 export function AppTopbar() {
   const { user, roles, signOut } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
@@ -58,12 +60,14 @@ export function AppTopbar() {
         <PWAInstallButton />
         <BranchSwitcher />
 
-        <Button variant="ghost" size="icon-sm" className="relative" asChild>
-          <Link to="/notifications" aria-label="Notifications">
-            <Bell className="size-4" />
-            <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
-          </Link>
-        </Button>
+        <Link
+          to="/notifications"
+          aria-label="Notifications"
+          className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "relative")}
+        >
+          <Bell className="size-4" />
+          <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
+        </Link>
 
         <ThemeToggle />
 
@@ -93,15 +97,11 @@ export function AppTopbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/profile" className="gap-2 text-xs">
-                <UserRound className="size-3.5" /> Profile
-              </Link>
+            <DropdownMenuItem onSelect={() => void navigate({ to: "/profile" })} className="gap-2 text-xs">
+              <UserRound className="size-3.5" /> Profile
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/settings" className="gap-2 text-xs">
-                <Settings className="size-3.5" /> Settings
-              </Link>
+            <DropdownMenuItem onSelect={() => void navigate({ to: "/settings" })} className="gap-2 text-xs">
+              <Settings className="size-3.5" /> Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => void signOut()} className="gap-2 text-xs text-destructive focus:text-destructive">
