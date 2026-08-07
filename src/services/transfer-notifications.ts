@@ -14,7 +14,8 @@ export interface NotificationPayload {
   sourceBranch: string;
   destinationBranch: string;
   createdBy?: string;
-  recipients: string[]; // User IDs
+  recipients: string[]; // User IDs or emails
+  branchIds?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -34,6 +35,7 @@ export class TransferNotificationService {
       destinationBranch: transfer.destinationBranchId,
       createdBy: transfer.createdBy,
       recipients,
+      branchIds: [transfer.sourceBranchId],
     };
 
     await this.createNotification(payload);
@@ -55,6 +57,7 @@ export class TransferNotificationService {
       sourceBranch: transfer.sourceBranchId,
       destinationBranch: transfer.destinationBranchId,
       recipients,
+      branchIds: [transfer.sourceBranchId, transfer.destinationBranchId],
       metadata: {
         dispatchedAt: transfer.dispatchedAt,
       },
@@ -77,6 +80,7 @@ export class TransferNotificationService {
       sourceBranch: transfer.sourceBranchId,
       destinationBranch: transfer.destinationBranchId,
       recipients,
+      branchIds: [transfer.destinationBranchId],
       metadata: {
         expectedArrivalDate: transfer.expectedArrivalDate,
       },
@@ -101,6 +105,7 @@ export class TransferNotificationService {
       sourceBranch: transfer.sourceBranchId,
       destinationBranch: transfer.destinationBranchId,
       recipients,
+      branchIds: [transfer.sourceBranchId, transfer.destinationBranchId],
       metadata: {
         receivedAt: transfer.receivedAt,
       },
@@ -128,6 +133,7 @@ export class TransferNotificationService {
       sourceBranch: transfer.sourceBranchId,
       destinationBranch: transfer.destinationBranchId,
       recipients,
+      branchIds: [transfer.sourceBranchId, transfer.destinationBranchId],
       metadata: {
         rejectedAt: transfer.rejectedAt,
         reason,
@@ -154,6 +160,7 @@ export class TransferNotificationService {
       sourceBranch: transfer.sourceBranchId,
       destinationBranch: transfer.destinationBranchId,
       recipients,
+      branchIds: [transfer.sourceBranchId],
       metadata: {
         cancelledAt: transfer.cancelledAt,
         reason,
@@ -171,10 +178,14 @@ export class TransferNotificationService {
     const title = this.getNotificationTitle(payload.event, payload.transferType);
     const message = this.getNotificationMessage(payload);
 
-    for (const userId of payload.recipients) {
+    for (const recipient of payload.recipients) {
       const notification = {
         id: crypto.randomUUID(),
-        userId,
+        userId: recipient,
+        branchId: payload.branchIds?.[0] ?? payload.destinationBranch,
+        branchIds: payload.branchIds,
+        sourceBranchId: payload.sourceBranch,
+        destinationBranchId: payload.destinationBranch,
         title,
         message,
         type: "transfer",
@@ -185,21 +196,21 @@ export class TransferNotificationService {
           event: payload.event,
         },
         createdAt: Date.now(),
-      };
+      } as Record<string, unknown>;
 
       await db.notifications.put(notification);
     }
   }
 
   /**
-   * Get all staff user IDs for a branch.
+   * Get staff recipients for a branch.
    */
   private static async getRecipientsForBranch(branchId: string): Promise<string[]> {
     const staff = await db.staff.toArray();
     return staff
       .filter((s) => s.branchId === branchId && s.status === "active")
-      .map((s) => s.authUserId || "")
-      .filter(Boolean);
+      .flatMap((s) => (s.authUserId ? [s.authUserId] : s.email ? [s.email] : []))
+      .filter(Boolean) as string[];
   }
 
   /**

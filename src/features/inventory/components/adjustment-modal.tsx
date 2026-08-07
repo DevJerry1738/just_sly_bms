@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { productRepository } from "@/repositories/product.repository";
 import { productPackagingRepository } from "@/repositories/product-packaging.repository";
 import { inventoryAdjustmentRepository } from "@/repositories/inventory-adjustment.repository";
+import { inventoryBatchRepository } from "@/repositories/inventory-batch.repository";
 import { inventoryConversionService } from "@/services/inventory/inventory-conversion.service";
 import { useAuth } from "@/providers/auth-provider";
 import type { ProductSchema, ProductPackagingSchema, AdjustmentReason } from "@/database/schema";
@@ -39,6 +40,8 @@ export function AdjustmentModal({ isOpen, onClose, onSuccess, branchId }: Adjust
   const [adjustmentType, setAdjustmentType] = useState<"add" | "deduct">("add");
   const [quantity, setQuantity] = useState("");
   const [packagingLabel, setPackagingLabel] = useState("");
+  const [manufactureDate, setManufactureDate] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
   const [reason, setReason] = useState<AdjustmentReason>("stock_count_correction");
   const [notes, setNotes] = useState("");
 
@@ -80,6 +83,8 @@ export function AdjustmentModal({ isOpen, onClose, onSuccess, branchId }: Adjust
     setAdjustmentType("add");
     setQuantity("");
     setPackagingLabel("");
+    setManufactureDate("");
+    setExpiryDate("");
     setReason("stock_count_correction");
     setNotes("");
   };
@@ -97,6 +102,11 @@ export function AdjustmentModal({ isOpen, onClose, onSuccess, branchId }: Adjust
       return;
     }
 
+    if (adjustmentType === "add" && selectedProduct.trackExpiry && !expiryDate) {
+      alert("Expiry date is required for products that track expiry.");
+      return;
+    }
+
     setLoading(true);
     try {
       const baseUnitsQty = await inventoryConversionService.convertToBaseUnits(
@@ -106,6 +116,22 @@ export function AdjustmentModal({ isOpen, onClose, onSuccess, branchId }: Adjust
       );
 
       const finalSignedQty = adjustmentType === "add" ? baseUnitsQty : -baseUnitsQty;
+      let batchId: string | null | undefined = undefined;
+
+      if (adjustmentType === "add" && (selectedProduct.trackExpiry || manufactureDate || expiryDate)) {
+        const batch = await inventoryBatchRepository.createBatch({
+          productId: selectedProduct.id,
+          branchId,
+          initialQuantity: baseUnitsQty,
+          quantityOnHand: baseUnitsQty,
+          manufactureDate: manufactureDate || undefined,
+          expiryDate: expiryDate || undefined,
+          unitCost: selectedProduct.costPrice || 0,
+          notes: notes.trim() || undefined,
+          createdBy: user?.id ?? "system",
+        });
+        batchId = batch.id;
+      }
 
       await inventoryAdjustmentRepository.createAdjustment({
         productId: selectedProduct.id,
@@ -115,6 +141,7 @@ export function AdjustmentModal({ isOpen, onClose, onSuccess, branchId }: Adjust
         unitCost: selectedProduct.costPrice || 0,
         reason,
         notes: notes.trim() || undefined,
+        batchId,
         performedBy: user?.id ?? "system",
         performedByName: user?.displayName ?? user?.email,
       });
@@ -216,6 +243,34 @@ export function AdjustmentModal({ isOpen, onClose, onSuccess, branchId }: Adjust
                   </select>
                 </div>
               </div>
+
+              {(adjustmentType === "add" || selectedProduct.trackExpiry) && (
+                <div className="p-3 bg-muted/30 border rounded-lg space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Batch Details
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="adj-manufacture">Manufacture Date</Label>
+                      <Input
+                        id="adj-manufacture"
+                        type="date"
+                        value={manufactureDate}
+                        onChange={(e) => setManufactureDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="adj-expiry">Expiry Date</Label>
+                      <Input
+                        id="adj-expiry"
+                        type="date"
+                        value={expiryDate}
+                        onChange={(e) => setExpiryDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Reason */}
               <div className="space-y-1.5">

@@ -253,6 +253,19 @@ export class InventoryTransactionRepository {
   async getByReference(ref: string): Promise<InventoryTransactionSchema | undefined> {
     return db.inventory_transactions.where("referenceNumber").equals(ref).first();
   }
+
+  async getByProductAndBranch(
+    productId: string,
+    branchId: string
+  ): Promise<InventoryTransactionSchema[]> {
+    const results = await db.inventory_transactions
+      .where("productId")
+      .equals(productId)
+      .reverse()
+      .sortBy("timestamp");
+
+    return results.filter((t) => t.branchId === branchId);
+  }
 }
 
 export const inventoryTransactionRepository = new InventoryTransactionRepository();

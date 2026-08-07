@@ -32,6 +32,7 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
   const [packagingLabel, setPackagingLabel] = useState("");
   const [unitCost, setUnitCost] = useState("");
   const [batchNumber, setBatchNumber] = useState("");
+  const [manufactureDate, setManufactureDate] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -62,7 +63,8 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
       if (p) {
         setSelectedProduct(p);
         setUnitCost(p.costPrice ? String(p.costPrice) : "");
-        setExpiryDate(p.expiryDate ?? "");
+        setManufactureDate("");
+        setExpiryDate("");
         setBatchNumber("");
         const pkgs = await productPackagingRepository.getPackagingForProduct(p.id);
         setPackagings(pkgs);
@@ -80,6 +82,7 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
     setPackagingLabel("");
     setUnitCost("");
     setBatchNumber("");
+    setManufactureDate("");
     setExpiryDate("");
     setNotes("");
   };
@@ -116,7 +119,8 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
         branchId,
         initialQuantity: baseUnitsQty,
         quantityOnHand: baseUnitsQty,
-        expiryDate: expiryDate || (selectedProduct as any).expiryDate || undefined,
+        manufactureDate: manufactureDate || undefined,
+        expiryDate: expiryDate || undefined,
         unitCost: cost,
         notes: notes.trim() || undefined,
         createdBy: user?.id ?? "system",
@@ -235,12 +239,6 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Batch &amp; Expiry Configuration
                   </h4>
-                  {selectedProduct.trackExpiry && (
-                    <p className="text-xs text-muted-foreground">
-                      Expiration date will be prefilled from the product record when available.
-                    </p>
-                  )}
-
                   <div className="space-y-1.5">
                     <Label htmlFor="op-batch">Batch Number (Optional)</Label>
                     <Input
@@ -248,6 +246,16 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
                       placeholder="Auto-generated if left blank"
                       value={batchNumber}
                       onChange={(e) => setBatchNumber(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="op-manufacture">Manufacture Date</Label>
+                    <Input
+                      id="op-manufacture"
+                      type="date"
+                      value={manufactureDate}
+                      onChange={(e) => setManufactureDate(e.target.value)}
                     />
                   </div>
 

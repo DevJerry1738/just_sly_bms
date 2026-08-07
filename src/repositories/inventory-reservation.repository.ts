@@ -2,7 +2,7 @@ import { BaseRepository } from "./base.repository";
 import { db, type InventoryReservationSchema } from "@/database/schema";
 import { SyncQueueService } from "@/services/sync/sync-queue";
 import { DomainEvents } from "@/services/events/domain-events";
-import { inventoryBalanceService } from "@/services/inventory/inventory-balance.service";
+import { inventoryBalanceRepository } from "@/repositories/inventory-balance.repository";
 
 // ---------------------------------------------------------------------------
 // InventoryReservationRepository
@@ -128,14 +128,25 @@ export class InventoryReservationRepository extends BaseRepository<InventoryRese
 
   /**
    * Get available quantity (on hand - reserved - damaged, etc).
-   * Uses inventoryBalanceService to get current on-hand quantity.
+   * Uses the cached inventory balance record from inventory balances.
    */
   async getAvailableQuantity(productId: string, branchId: string): Promise<number> {
-    const balance = await inventoryBalanceService.getBalance(productId, branchId);
-    if (!balance) return 0;
+    const balance = await inventoryBalanceRepository.getBalance(productId, branchId);
+    if (!balance) {
+      console.warn(`[InventoryReservation] No balance found for product ${productId} at branch ${branchId}`);
+      return 0;
+    }
 
     const reserved = await this.getReservedQuantity(productId, branchId);
     const available = Math.max(0, balance.quantityOnHand - balance.reservedQuantity - reserved);
+    
+    console.log(`[InventoryReservation] getAvailableQuantity for ${productId} @ ${branchId}:`, {
+      quantityOnHand: balance.quantityOnHand,
+      reservedQuantity: balance.reservedQuantity,
+      additionalReservations: reserved,
+      calculated: available,
+    });
+    
     return available;
   }
 

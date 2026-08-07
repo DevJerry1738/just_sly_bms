@@ -111,8 +111,9 @@ export function CurrentStockTable({ branchId }: { branchId?: string }) {
               </tr>
             ) : (
               filteredRows.map((row) => {
+                const threshold = row.reorderThreshold ?? 0;
                 const isOutOfStock = row.currentStock <= 0;
-                const isLowStock = !isOutOfStock && row.currentStock < 10;
+                const isLowStock = !isOutOfStock && threshold > 0 && row.currentStock < threshold;
 
                 return (
                   <tr key={row.productId} className="hover:bg-muted/30 transition-colors">
@@ -134,7 +135,7 @@ export function CurrentStockTable({ branchId }: { branchId?: string }) {
                       {row.reservedStock}
                     </td>
                     <td className="p-3 text-right font-mono text-xs text-muted-foreground">
-                      10
+                      {threshold}
                     </td>
                     {canViewCost && (
                       <td className="p-3 text-right font-mono text-xs">

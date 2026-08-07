@@ -10,6 +10,7 @@ import { categoryRepository } from "@/repositories/category.repository";
 import { unitOfMeasureRepository } from "@/repositories/unit-of-measure.repository";
 import type { CategorySchema, UnitOfMeasureSchema, ProductSchema } from "@/database/schema";
 import { useAuth } from "@/providers/auth-provider";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -20,6 +21,9 @@ interface ProductFormModalProps {
 
 export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: ProductFormModalProps) {
   const { user } = useAuth();
+  const { hasPermission } = useAuthorization();
+  const canManageCost = hasPermission("products:edit_cost") || hasPermission("products:view_cost");
+  const canCreateProduct = hasPermission("products:create");
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<CategorySchema[]>([]);
   const [units, setUnits] = useState<UnitOfMeasureSchema[]>([]);
@@ -36,7 +40,6 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
   // Inventory foundation fields
   const [baseUnit, setBaseUnit] = useState("Piece");
   const [trackExpiry, setTrackExpiry] = useState(false);
-  const [expiryDate, setExpiryDate] = useState("");
   const [lowStockThreshold, setLowStockThreshold] = useState("");
 
   // Pricing fields — stored as strings to avoid "05" input glitch
@@ -69,7 +72,6 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
         setDescription(productToEdit.description ?? "");
         setBaseUnit(productToEdit.baseUnit);
         setTrackExpiry(productToEdit.trackExpiry);
-        setExpiryDate(productToEdit.expiryDate ?? "");
         setLowStockThreshold(String(productToEdit.lowStockThreshold));
         setCostPrice(String(productToEdit.costPrice));
         setRetailPrice(String(productToEdit.retailPrice));
@@ -95,7 +97,6 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
     setDescription("");
     setBaseUnit("Piece");
     setTrackExpiry(false);
-    setExpiryDate("");
     setLowStockThreshold("");
     setCostPrice("");
     setRetailPrice("");
@@ -136,8 +137,17 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
       return;
     }
 
+    if (!productToEdit && !canCreateProduct) {
+      alert("You do not have permission to create products.");
+      return;
+    }
+
     setLoading(true);
     try {
+      const resolvedCostPrice = canManageCost
+        ? parseNumericValue(costPrice, productToEdit?.costPrice ?? 0)
+        : productToEdit?.costPrice ?? 0;
+
       const sharedFields = {
         name: name.trim(),
         sku: sku.trim() || undefined,
@@ -147,9 +157,8 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
         description: description.trim() || undefined,
         baseUnit,
         trackExpiry,
-        expiryDate: trackExpiry && expiryDate ? expiryDate : undefined,
         lowStockThreshold: parseNumericValue(lowStockThreshold, productToEdit?.lowStockThreshold ?? 0),
-        costPrice: parseNumericValue(costPrice, productToEdit?.costPrice ?? 0),
+        costPrice: resolvedCostPrice,
         retailPrice: parseNumericValue(retailPrice, productToEdit?.retailPrice ?? 0),
         wholesalePrice: parseNumericValue(wholesalePrice, productToEdit?.wholesalePrice ?? 0),
         supplyPrice: parseNumericValue(supplyPrice, productToEdit?.supplyPrice ?? 0),
@@ -277,30 +286,13 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
               {/* Expiry toggle — full row */}
               <div className="col-span-2">
                 <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-                  <Switch id="prod-expiry" checked={trackExpiry} onCheckedChange={(val) => { setTrackExpiry(val); if (!val) setExpiryDate(""); }} />
+                  <Switch id="prod-expiry" checked={trackExpiry} onCheckedChange={(val) => setTrackExpiry(val)} />
                   <div className="flex-1">
                     <Label htmlFor="prod-expiry" className="cursor-pointer font-medium">Track Expiry Dates</Label>
-                    <p className="text-xs text-muted-foreground">Enable to record and monitor this product's expiration date.</p>
+                    <p className="text-xs text-muted-foreground">Enable expiry tracking for batches created during opening stock and stock adjustments.</p>
                   </div>
                 </div>
               </div>
-
-              {/* Expiry Date — only shown when trackExpiry is on */}
-              {trackExpiry && (
-                <div className="col-span-2 space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <Label htmlFor="prod-expiry-date">Expiration Date *</Label>
-                  <Input
-                    id="prod-expiry-date"
-                    type="date"
-                    value={expiryDate}
-                    onChange={(e) => setExpiryDate(e.target.value)}
-                    min={new Date().toISOString().split("T")[0]}
-                    required={trackExpiry}
-                    className="max-w-xs"
-                  />
-                  <p className="text-xs text-muted-foreground">Enter the product's expiration date (must be a future date).</p>
-                </div>
-              )}
             </div>
           </div>
 
@@ -308,19 +300,21 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
           <div className="space-y-4 pt-2 border-t">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pricing Tiers (₦)</h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="prod-cost">Cost Price *</Label>
-                <Input
-                  id="prod-cost"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={costPrice}
-                  onChange={(e) => setCostPrice(e.target.value)}
-                  required
-                />
-              </div>
+              {canManageCost && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="prod-cost">Cost Price *</Label>
+                  <Input
+                    id="prod-cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={costPrice}
+                    onChange={(e) => setCostPrice(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label htmlFor="prod-retail">Retail Price *</Label>

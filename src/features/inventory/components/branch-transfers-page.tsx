@@ -13,40 +13,46 @@ import type { InventoryTransferSchema } from "@/database/schema";
 
 interface BranchTransfersPageProps {
   branchId: string;
+  refreshKey?: number;
   onCreateClick: () => void;
+  onViewClick?: (transferId: string, transfer?: InventoryTransferSchema) => void;
 }
 
-export function BranchTransfersPage({ branchId, onCreateClick }: BranchTransfersPageProps) {
+export function BranchTransfersPage({ branchId, refreshKey, onCreateClick, onViewClick }: BranchTransfersPageProps) {
   const { hasPermission } = useAuthorization();
-  const [transfers, setTransfers] = useState<InventoryTransferSchema[]>([]);
+  const [transfers, setTransfers] = useState<Array<InventoryTransferSchema & {
+    itemCount?: number;
+    sourceBranchName?: string;
+    destinationBranchName?: string;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<"all" | "sent" | "received">("all");
 
-  useEffect(() => {
-    const loadTransfers = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await listBranchTransfers({
-          branchId,
-          direction: "all",
-        });
+  const loadTransfers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await listBranchTransfers({
+        branchId,
+        direction: "all",
+      });
 
-        if (result.success) {
-          setTransfers(result.data);
-        } else {
-          setError(result.error);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load transfers");
-      } finally {
-        setLoading(false);
+      if (result.success) {
+        setTransfers(result.data);
+      } else {
+        setError(result.error);
       }
-    };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load transfers");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadTransfers();
-  }, [branchId]);
+  }, [branchId, refreshKey]);
 
   const filteredTransfers = transfers.filter((t) => {
     if (filterType === "all") return true;
@@ -129,7 +135,7 @@ export function BranchTransfersPage({ branchId, onCreateClick }: BranchTransfers
 
       {/* Transfers List */}
       {error ? (
-        <ErrorState message={error} />
+        <ErrorState message={error} onRetry={loadTransfers} />
       ) : loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
@@ -177,12 +183,18 @@ export function BranchTransfersPage({ branchId, onCreateClick }: BranchTransfers
                     {transfer.transferNumber}
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">
-                    {transfer.sourceBranchId === branchId ? "This Branch" : transfer.sourceBranchId}
+                    {transfer.sourceBranchId === branchId
+                      ? "This Branch"
+                      : transfer.sourceBranchName ?? transfer.sourceBranchId}
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">
-                    {transfer.destinationBranchId === branchId ? "This Branch" : transfer.destinationBranchId}
+                    {transfer.destinationBranchId === branchId
+                      ? "This Branch"
+                      : transfer.destinationBranchName ?? transfer.destinationBranchId}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">--</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {transfer.itemCount != null ? transfer.itemCount : "--"}
+                  </td>
                   <td className="px-6 py-4 text-sm">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(transfer.status)}`}>
                       {transfer.status.replace(/_/g, " ")}
@@ -192,7 +204,11 @@ export function BranchTransfersPage({ branchId, onCreateClick }: BranchTransfers
                     {new Date(transfer.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onViewClick?.(transfer.id, transfer)}
+                    >
                       View
                     </Button>
                   </td>

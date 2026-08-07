@@ -19,9 +19,9 @@ interface TransferManagementState {
   view: "list" | "detail";
   selectedTransferId?: string;
   selectedTransfer?: InventoryTransferSchema & {
-    itemCount: number;
-    totalQuantity: number;
-    totalValue: number;
+    itemCount?: number;
+    totalQuantity?: number;
+    totalValue?: number;
   };
   createModal: {
     open: boolean;
@@ -44,6 +44,7 @@ interface TransferManagementState {
     transferId?: string;
   };
   activeTab: "hq" | "branch";
+  refreshKey: number;
 }
 
 export function TransferManagementPage() {
@@ -58,6 +59,7 @@ export function TransferManagementPage() {
     acceptModal: { open: false },
     rejectModal: { open: false },
     activeTab: "hq",
+    refreshKey: 0,
   });
 
   useEffect(() => {
@@ -99,11 +101,17 @@ export function TransferManagementPage() {
     }));
   };
 
-  const handleDispatch = (transferId: string, transfer?: any) => {
+  const handleDispatch = (
+    transferId: string,
+    transfer?: any,
+    stats?: { itemCount: number; totalQuantity: number; totalValue: number },
+  ) => {
     setState((prev) => ({
       ...prev,
       dispatchModal: { open: true, transferId },
-      selectedTransfer: transfer,
+      selectedTransfer: transfer
+        ? { ...transfer, ...stats }
+        : prev.selectedTransfer,
     }));
   };
 
@@ -128,54 +136,76 @@ export function TransferManagementPage() {
     }));
   };
 
+  const triggerRefresh = () => {
+    setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));
+  };
+
   const handleCreateSuccess = () => {
     setState((prev) => ({
       ...prev,
       createModal: { ...prev.createModal, open: false },
     }));
-    // Trigger a refresh of the transfer list
+    triggerRefresh();
+  };
+
+  const handleWorkflowSuccess = () => {
+    triggerRefresh();
+    handleBackToList();
   };
 
   if (!branchId) {
     return <div className="text-center py-12">Loading...</div>;
   }
 
-  if (state.view === "detail" && state.selectedTransferId) {
-    return (
-      <TransferDetailView
-        transferId={state.selectedTransferId}
-        onBack={handleBackToList}
-        onDispatch={handleDispatch}
-        onReceipt={handleReceipt}
-        onReject={handleReject}
-      />
-    );
-  }
+  const isDetailView = state.view === "detail" && state.selectedTransferId;
 
   return (
     <div className="space-y-6">
-      <Tabs
-        defaultValue={isSuperAdmin ? "hq" : "branch"}
-        value={state.activeTab}
-        onValueChange={(value) =>
-          setState((prev) => ({ ...prev, activeTab: value as "hq" | "branch" }))
-        }
-      >
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          {isSuperAdmin && <TabsTrigger value="hq">HQ Supplies</TabsTrigger>}
-          <TabsTrigger value="branch">Branch Transfers</TabsTrigger>
-        </TabsList>
+      {isDetailView ? (
+        <TransferDetailView
+          transferId={state.selectedTransferId}
+          onBack={handleBackToList}
+          onDispatch={handleDispatch}
+          onReceipt={handleReceipt}
+          onAccept={handleAccept}
+          onReject={handleReject}
+        />
+      ) : (
+        <>
+          <Tabs
+          defaultValue={isSuperAdmin ? "hq" : "branch"}
+          value={state.activeTab}
+          onValueChange={(value) =>
+            setState((prev) => ({ ...prev, activeTab: value as "hq" | "branch" }))
+          }
+        >
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            {isSuperAdmin && <TabsTrigger value="hq">HQ Supplies</TabsTrigger>}
+            <TabsTrigger value="branch">Branch Transfers</TabsTrigger>
+          </TabsList>
 
-        {isSuperAdmin && (
-          <TabsContent value="hq">
-            <HQSuppliesPage branchId={branchId} onCreateClick={handleCreateSupply} />
+          {isSuperAdmin && (
+            <TabsContent value="hq">
+              <HQSuppliesPage
+                branchId={branchId}
+                refreshKey={state.refreshKey}
+                onCreateClick={handleCreateSupply}
+                onViewClick={handleViewTransfer}
+              />
+            </TabsContent>
+          )}
+
+          <TabsContent value="branch">
+            <BranchTransfersPage
+              branchId={branchId}
+              refreshKey={state.refreshKey}
+              onCreateClick={handleCreateTransfer}
+              onViewClick={handleViewTransfer}
+            />
           </TabsContent>
-        )}
-
-        <TabsContent value="branch">
-          <BranchTransfersPage branchId={branchId} onCreateClick={handleCreateTransfer} />
-        </TabsContent>
-      </Tabs>
+        </Tabs>
+        </>
+      )}
 
       {/* Create Transfer Modal */}
       <CreateTransferModal
@@ -203,10 +233,10 @@ export function TransferManagementPage() {
           }
           transferId={state.dispatchModal.transferId}
           transferNumber={state.selectedTransfer.transferNumber}
-          itemCount={state.selectedTransfer.itemCount}
-          totalQuantity={state.selectedTransfer.totalQuantity}
-          totalValue={state.selectedTransfer.totalValue}
-          onSuccess={handleBackToList}
+          itemCount={state.selectedTransfer.itemCount ?? 0}
+          totalQuantity={state.selectedTransfer.totalQuantity ?? 0}
+          totalValue={state.selectedTransfer.totalValue ?? 0}
+          onSuccess={handleWorkflowSuccess}
         />
       )}
 
@@ -222,7 +252,7 @@ export function TransferManagementPage() {
           }
           transferId={state.receiptModal.transferId}
           transferNumber={state.selectedTransfer?.transferNumber || ""}
-          onSuccess={handleBackToList}
+          onSuccess={handleWorkflowSuccess}
         />
       )}
 
@@ -239,7 +269,7 @@ export function TransferManagementPage() {
           transferId={state.acceptModal.transferId}
           transferNumber={state.selectedTransfer?.transferNumber || ""}
           sourceBranch={state.selectedTransfer?.sourceBranchId || ""}
-          onSuccess={handleBackToList}
+          onSuccess={handleWorkflowSuccess}
         />
       )}
 
@@ -256,7 +286,7 @@ export function TransferManagementPage() {
           transferId={state.rejectModal.transferId}
           transferNumber={state.selectedTransfer?.transferNumber || ""}
           sourceBranch={state.selectedTransfer?.sourceBranchId || ""}
-          onSuccess={handleBackToList}
+          onSuccess={handleWorkflowSuccess}
         />
       )}
     </div>

@@ -9,17 +9,29 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { ErrorState } from "@/components/common/error-state";
 import type { InventoryTransferSchema, InventoryTransferItemSchema } from "@/database/schema";
 
+interface TransferDetailItem extends InventoryTransferItemSchema {
+  productName?: string;
+}
+
 interface TransferDetailViewProps {
   transferId: string;
   onBack?: () => void;
-  onDispatch?: (transferId: string) => void;
+  onDispatch?: (
+    transferId: string,
+    transfer?: any,
+    stats?: { itemCount: number; totalQuantity: number; totalValue: number },
+  ) => void;
   onReceipt?: (transferId: string) => void;
+  onAccept?: (transferId: string) => void;
   onReject?: (transferId: string) => void;
 }
 
 interface TransferDetail {
-  transfer: InventoryTransferSchema | undefined;
-  items: InventoryTransferItemSchema[];
+  transfer: (InventoryTransferSchema & {
+    sourceBranchName?: string;
+    destinationBranchName?: string;
+  }) | undefined;
+  items: TransferDetailItem[];
   stats: {
     itemCount: number;
     totalQuantity: number;
@@ -86,6 +98,7 @@ export function TransferDetailView({
 
   const canDispatch = transfer.status === "draft" || transfer.status === "pending_dispatch";
   const canReceipt = transfer.status === "dispatched" || transfer.status === "in_transit";
+  const canAccept = transfer.status === "pending_receipt";
   const canReject = transfer.status === "pending_receipt" || transfer.status === "dispatched";
 
   return (
@@ -116,14 +129,18 @@ export function TransferDetailView({
           <CardHeader>
             <CardTitle className="text-sm">Source Branch</CardTitle>
           </CardHeader>
-          <CardContent className="text-lg font-semibold">{transfer.sourceBranchId}</CardContent>
+          <CardContent className="text-lg font-semibold">
+            {transfer.sourceBranchName || transfer.sourceBranchId}
+          </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Destination Branch</CardTitle>
           </CardHeader>
-          <CardContent className="text-lg font-semibold">{transfer.destinationBranchId}</CardContent>
+          <CardContent className="text-lg font-semibold">
+            {transfer.destinationBranchName || transfer.destinationBranchId}
+          </CardContent>
         </Card>
 
         <Card>
@@ -156,7 +173,7 @@ export function TransferDetailView({
           <CardHeader>
             <CardTitle className="text-sm">Total Value</CardTitle>
           </CardHeader>
-          <CardContent className="text-2xl font-bold">${data.stats.totalValue.toFixed(2)}</CardContent>
+          <CardContent className="text-2xl font-bold">₦{data.stats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</CardContent>
         </Card>
 
         <Card>
@@ -184,7 +201,7 @@ export function TransferDetailView({
               <table className="w-full text-sm">
                 <thead className="border-b bg-slate-50">
                   <tr>
-                    <th className="px-4 py-2 text-left">Product ID</th>
+                    <th className="px-4 py-2 text-left">Product</th>
                     <th className="px-4 py-2 text-left">Packaging</th>
                     <th className="px-4 py-2 text-right">Quantity</th>
                     <th className="px-4 py-2 text-right">Unit Cost</th>
@@ -194,14 +211,16 @@ export function TransferDetailView({
                 <tbody>
                   {data.items.map((item, i) => (
                     <tr key={i} className="border-b hover:bg-slate-50">
-                      <td className="px-4 py-2 font-medium">{item.productId}</td>
+                      <td className="px-4 py-2 font-medium">
+                        {item.productName ?? item.productId}
+                      </td>
                       <td className="px-4 py-2 text-slate-600">
                         {item.packagingUnit || "Base"}
                       </td>
                       <td className="px-4 py-2 text-right">{item.convertedBaseQuantity}</td>
-                      <td className="px-4 py-2 text-right">${item.unitCostSnapshot.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">₦{item.unitCostSnapshot.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                       <td className="px-4 py-2 text-right font-medium">
-                        ${(item.convertedBaseQuantity * item.unitCostSnapshot).toFixed(2)}
+                        ₦{(item.convertedBaseQuantity * item.unitCostSnapshot).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}
@@ -223,13 +242,22 @@ export function TransferDetailView({
       )}
 
       {/* Actions */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {canDispatch && onDispatch && (
-          <Button onClick={() => onDispatch(transferId)}>Dispatch Transfer</Button>
+          <Button
+            onClick={() => onDispatch(transferId, transfer, data.stats)}
+          >
+            Dispatch Transfer
+          </Button>
         )}
         {canReceipt && onReceipt && (
           <Button onClick={() => onReceipt(transferId)} className="bg-green-600 hover:bg-green-700">
             Confirm Receipt
+          </Button>
+        )}
+        {canAccept && onAccept && (
+          <Button onClick={() => onAccept(transferId)} className="bg-emerald-600 hover:bg-emerald-700">
+            Accept Transfer
           </Button>
         )}
         {canReject && onReject && (

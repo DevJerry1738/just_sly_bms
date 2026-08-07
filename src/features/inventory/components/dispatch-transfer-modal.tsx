@@ -84,7 +84,7 @@ export function DispatchTransferModal({
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-slate-600">Total Value:</span>
-              <span className="font-medium">${totalValue.toFixed(2)}</span>
+              <span className="font-medium">₦{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </div>
           </div>
 

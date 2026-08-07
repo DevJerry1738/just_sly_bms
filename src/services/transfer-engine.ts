@@ -8,6 +8,7 @@ import { transferStatusHistoryRepository } from "@/repositories/transfer-status-
 import { inventoryTransactionRepository } from "@/repositories/inventory-transaction.repository";
 import { inventoryBatchRepository } from "@/repositories/inventory-batch.repository";
 import { auditLogRepository } from "@/repositories/audit-log.repository";
+import { transferNotificationService } from "./transfer-notifications";
 import { db, type InventoryTransferSchema, type TransferStatus } from "@/database/schema";
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,8 @@ export class InventoryTransferEngine {
       errors.push("At least one item is required");
     }
 
+    console.log(`[TransferEngine] Validating ${items.length} items for source branch ${sourceBranchId}`);
+
     for (const item of items) {
       if (!item.productId) errors.push("Product ID is required for all items");
       if (item.convertedBaseQuantity <= 0) {
@@ -76,6 +79,10 @@ export class InventoryTransferEngine {
         item.productId,
         sourceBranchId
       );
+      console.log(
+        `[TransferEngine] Stock check for ${item.productId}: requested=${item.convertedBaseQuantity}, available=${available}`
+      );
+      
       if (available < item.convertedBaseQuantity) {
         errors.push(
           `Insufficient stock for ${item.productId}: requested ${item.convertedBaseQuantity}, available ${available}`
@@ -96,6 +103,13 @@ export class InventoryTransferEngine {
     input: CreateTransferInput,
     items: CreateTransferItemInput[]
   ): Promise<InventoryTransferSchema> {
+    console.log("[TransferEngine] createTransfer called with:", {
+      transferType: input.transferType,
+      sourceBranchId: input.sourceBranchId,
+      destinationBranchId: input.destinationBranchId,
+      itemCount: items.length,
+    });
+
     // Validate inputs
     const transferValidation = await this.validateTransferCreation(input);
     if (!transferValidation.valid) {
@@ -169,6 +183,9 @@ export class InventoryTransferEngine {
       synced: false,
     });
 
+    // Notify branch staff that a transfer has been created
+    await transferNotificationService.notifyTransferCreated(transfer);
+
     return transfer;
   }
 
@@ -196,6 +213,7 @@ export class InventoryTransferEngine {
           transferItemId,
           batchId: batch.id,
           batchNumber: batch.batchNumber,
+          manufactureDate: batch.manufactureDate,
           expiryDate: batch.expiryDate,
           quantityAllocated: allocateQty,
           createdAt: Date.now(),
@@ -214,7 +232,7 @@ export class InventoryTransferEngine {
   }
 
   /**
-   * Dispatch a transfer (transfer status = dispatched, deduct inventory).
+   * Dispatch a transfer and mark it as pending receipt.
    * Stock is already reserved; this deducts it from on-hand.
    */
   async dispatchTransfer(
@@ -237,34 +255,55 @@ export class InventoryTransferEngine {
       throw new Error("Cannot dispatch transfer with no items");
     }
 
-    // Create inventory transactions for each item (HQ out, Branch in)
+    // Create inventory transactions for each allocated batch (HQ out)
     for (const item of items) {
-      // HQ: Reduce inventory (negative quantity)
-      await inventoryTransactionRepository.recordTransaction({
-        type: "branch_transfer_out",
-        productId: item.productId,
-        branchId: transfer.sourceBranchId,
-        quantity: -item.convertedBaseQuantity,
-        baseUnit: "base",
-        unitCost: item.unitCostSnapshot,
-        batchId: item.batchId,
-        notes: `Dispatch transfer ${transfer.transferNumber}`,
-        performedBy: dispatchedBy,
-        performedByName: "", // Will be filled from auth context
-      });
+      const allocations = await db.inventory_transfer_batches
+        .where("transferItemId")
+        .equals(item.id)
+        .toArray();
+
+      if (allocations.length > 0) {
+        for (const allocation of allocations) {
+          await inventoryTransactionRepository.recordTransaction({
+            type: "branch_transfer_out",
+            productId: item.productId,
+            branchId: transfer.sourceBranchId,
+            quantity: -allocation.quantityAllocated,
+            baseUnit: "base",
+            unitCost: item.unitCostSnapshot,
+            batchId: allocation.batchId ?? null,
+            notes: `Dispatch transfer ${transfer.transferNumber}`,
+            performedBy: dispatchedBy,
+            performedByName: "",
+          });
+        }
+      } else {
+        await inventoryTransactionRepository.recordTransaction({
+          type: "branch_transfer_out",
+          productId: item.productId,
+          branchId: transfer.sourceBranchId,
+          quantity: -item.convertedBaseQuantity,
+          baseUnit: "base",
+          unitCost: item.unitCostSnapshot,
+          batchId: item.batchId ?? null,
+          notes: `Dispatch transfer ${transfer.transferNumber}`,
+          performedBy: dispatchedBy,
+          performedByName: "",
+        });
+      }
     }
 
-    // Update transfer status
+    // Update transfer status to pending receipt
     const updated = await inventoryTransferRepository.updateStatus(
       transferId,
-      "dispatched",
+      "pending_receipt",
       { dispatchedAt }
     );
 
     // Record status change
     await transferStatusHistoryRepository.recordStatusChange(
       transferId,
-      "dispatched",
+      "pending_receipt",
       dispatchedBy,
       transfer.status,
       "Transfer dispatched"
@@ -278,10 +317,13 @@ export class InventoryTransferEngine {
       entity: "InventoryTransfer",
       entityId: transferId,
       action: "TRANSFER_DISPATCHED",
-      after: { status: "dispatched", dispatchedAt },
+      after: { status: "pending_receipt", dispatchedAt },
       timestamp: Date.now(),
       synced: false,
     });
+
+    // Notify destination branch staff the transfer is pending receipt
+    await transferNotificationService.notifyTransferPendingReceipt(updated);
 
     return updated;
   }
@@ -300,7 +342,11 @@ export class InventoryTransferEngine {
       throw new Error(`Transfer not found: ${transferId}`);
     }
 
-    if (transfer.status !== "dispatched" && transfer.status !== "in_transit") {
+    if (
+      transfer.status !== "dispatched" &&
+      transfer.status !== "in_transit" &&
+      transfer.status !== "pending_receipt"
+    ) {
       throw new Error(`Cannot receive transfer with status: ${transfer.status}`);
     }
 
@@ -312,6 +358,18 @@ export class InventoryTransferEngine {
       const qty = receivedQuantities?.[item.id] ?? item.convertedBaseQuantity;
 
       if (qty > 0) {
+        const batch = await inventoryBatchRepository.createBatch({
+          productId: item.productId,
+          branchId: transfer.destinationBranchId,
+          initialQuantity: qty,
+          quantityOnHand: qty,
+          manufactureDate: item.manufactureDate || undefined,
+          expiryDate: item.expiryDate || undefined,
+          unitCost: item.unitCostSnapshot,
+          notes: `Receipt transfer ${transfer.transferNumber}`,
+          createdBy: receivedBy,
+        });
+
         // Destination: Increase inventory (positive quantity)
         await inventoryTransactionRepository.recordTransaction({
           type: "branch_transfer_in",
@@ -320,7 +378,7 @@ export class InventoryTransferEngine {
           quantity: qty,
           baseUnit: "base",
           unitCost: item.unitCostSnapshot,
-          batchId: item.batchId,
+          batchId: batch.id,
           notes: `Receipt transfer ${transfer.transferNumber}`,
           performedBy: receivedBy,
           performedByName: "",
@@ -359,6 +417,8 @@ export class InventoryTransferEngine {
       timestamp: Date.now(),
       synced: false,
     });
+
+    await transferNotificationService.notifyTransferReceived(updated);
 
     return updated;
   }
@@ -417,6 +477,8 @@ export class InventoryTransferEngine {
       synced: false,
     });
 
+    await transferNotificationService.notifyTransferRejected(updated, reason);
+
     return updated;
   }
 
@@ -472,6 +534,8 @@ export class InventoryTransferEngine {
       timestamp: Date.now(),
       synced: false,
     });
+
+    await transferNotificationService.notifyTransferCancelled(updated, reason);
 
     return updated;
   }

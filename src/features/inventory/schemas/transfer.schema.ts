@@ -22,6 +22,8 @@ export const CreateTransferItemSchema = z.object({
   convertedBaseQuantity: z.number().positive("Base quantity must be positive"),
   unitCostSnapshot: z.number().nonnegative("Unit cost must be non-negative"),
   batchId: z.string().optional(),
+  manufactureDate: z.string().optional(),
+  expiryDate: z.string().optional(),
   notes: z.string().optional(),
 });
 

@@ -12,38 +12,44 @@ import type { InventoryTransferSchema } from "@/database/schema";
 
 interface HQSuppliesPageProps {
   branchId: string;
+  refreshKey?: number;
   onCreateClick: () => void;
+  onViewClick?: (transferId: string, transfer?: InventoryTransferSchema) => void;
 }
 
-export function HQSuppliesPage({ branchId, onCreateClick }: HQSuppliesPageProps) {
-  const [transfers, setTransfers] = useState<InventoryTransferSchema[]>([]);
+export function HQSuppliesPage({ branchId, refreshKey, onCreateClick, onViewClick }: HQSuppliesPageProps) {
+  const [transfers, setTransfers] = useState<Array<InventoryTransferSchema & {
+    itemCount?: number;
+    sourceBranchName?: string;
+    destinationBranchName?: string;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const loadTransfers = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await listBranchTransfers({
-          branchId,
-          direction: "source",
-        });
+  const loadTransfers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await listBranchTransfers({
+        branchId,
+        direction: "source",
+      });
 
-        if (result.success) {
-          setTransfers(result.data);
-        } else {
-          setError(result.error);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load supplies");
-      } finally {
-        setLoading(false);
+      if (result.success) {
+        setTransfers(result.data ?? []);
+      } else {
+        setError(result.error ?? "Failed to load supplies");
       }
-    };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load supplies");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadTransfers();
-  }, [branchId]);
+  }, [branchId, refreshKey]);
 
   const stats = [
     {
@@ -102,7 +108,7 @@ export function HQSuppliesPage({ branchId, onCreateClick }: HQSuppliesPageProps)
 
       {/* Supplies List */}
       {error ? (
-        <ErrorState message={error} />
+        <ErrorState description={error} onRetry={loadTransfers} />
       ) : loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
@@ -147,9 +153,11 @@ export function HQSuppliesPage({ branchId, onCreateClick }: HQSuppliesPageProps)
                     {transfer.transferNumber}
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-600">
-                    {transfer.destinationBranchId}
+                    {transfer.destinationBranchName || transfer.destinationBranchId}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">--</td>
+                  <td className="px-6 py-4 text-sm text-slate-600">
+                    {transfer.itemCount != null ? transfer.itemCount : "--"}
+                  </td>
                   <td className="px-6 py-4 text-sm">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(transfer.status)}`}>
                       {transfer.status.replace(/_/g, " ")}
@@ -159,7 +167,11 @@ export function HQSuppliesPage({ branchId, onCreateClick }: HQSuppliesPageProps)
                     {new Date(transfer.createdAt).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-sm">
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onViewClick?.(transfer.id, transfer)}
+                    >
                       View
                     </Button>
                   </td>

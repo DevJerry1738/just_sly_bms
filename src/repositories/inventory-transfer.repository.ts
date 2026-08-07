@@ -35,6 +35,8 @@ export interface CreateTransferItemInput {
   convertedBaseQuantity: number;
   unitCostSnapshot: number;
   batchId?: string;
+  manufactureDate?: string;
+  expiryDate?: string;
   notes?: string;
 }
 

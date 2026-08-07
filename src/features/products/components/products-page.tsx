@@ -19,8 +19,9 @@ export function ProductsPage() {
   const { hasPermission } = useAuthorization();
   const { user } = useAuth();
   const { activeBranch } = useBranch();
-  const canViewCost = hasPermission("products:view_cost");
+  const canViewCost = hasPermission("products:view_cost") || hasPermission("products:edit_cost");
   const canImport = hasPermission("products:import");
+  const canCreateProduct = hasPermission("products:create");
 
   const [products, setProducts] = useState<ProductSchema[]>([]);
   const [categories, setCategories] = useState<CategorySchema[]>([]);
@@ -74,6 +75,10 @@ export function ProductsPage() {
   }, [user?.id, activeBranch?.id]);
 
   const handleOpenAddModal = () => {
+    if (!canCreateProduct) {
+      alert("You do not have permission to create products.");
+      return;
+    }
     setProductToEdit(null);
     setIsFormOpen(true);
   };
@@ -127,10 +132,12 @@ export function ProductsPage() {
               Import Excel
             </Button>
           )}
-          <Button size="sm" onClick={handleOpenAddModal}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Product
-          </Button>
+          {canCreateProduct && (
+            <Button size="sm" onClick={handleOpenAddModal}>
+              <Plus className="w-4 h-4 mr-2" />
+              Add Product
+            </Button>
+          )}
         </div>
       </div>
 

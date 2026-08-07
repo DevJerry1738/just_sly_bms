@@ -597,6 +597,8 @@ export interface InventoryTransferItemSchema {
   convertedBaseQuantity: number;
   unitCostSnapshot: number;
   batchId?: string;
+  manufactureDate?: string;
+  expiryDate?: string;
   notes?: string;
   createdAt: number;
   updatedAt: number;
@@ -608,6 +610,7 @@ export interface InventoryTransferBatchSchema {
   transferItemId: string;
   batchId?: string;
   batchNumber: string;
+  manufactureDate?: string;
   expiryDate?: string;
   quantityAllocated: number;
   createdAt: number;
@@ -838,4 +841,53 @@ export class JustSlyDatabase extends Dexie {
   }
 }
 
-export const db = new JustSlyDatabase();
+const canUseIndexedDB =
+  typeof window !== "undefined" && typeof indexedDB !== "undefined";
+
+function createNoOpTableProxy(): unknown {
+  return new Proxy(
+    {},
+    {
+      get(target, property) {
+        if (property === "constructor") {
+          return Object;
+        }
+
+        return () => {
+          throw new Error(
+            "IndexedDB is unavailable in this environment. Use getDb() only in browser runtime."
+          );
+        };
+      },
+    }
+  );
+}
+
+function createNoOpDb(): JustSlyDatabase {
+  return new Proxy(
+    {},
+    {
+      get(target, property) {
+        if (property === "constructor") {
+          return JustSlyDatabase;
+        }
+
+        return createNoOpTableProxy();
+      },
+    }
+  ) as unknown as JustSlyDatabase;
+}
+
+export const db: JustSlyDatabase = canUseIndexedDB
+  ? new JustSlyDatabase()
+  : createNoOpDb();
+
+export function getDb(): JustSlyDatabase {
+  if (!canUseIndexedDB) {
+    throw new Error(
+      "IndexedDB is unavailable in this environment. Use getDb() only in browser runtime."
+    );
+  }
+
+  return db;
+}

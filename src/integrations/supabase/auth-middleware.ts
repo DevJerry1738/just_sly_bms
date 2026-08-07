@@ -89,21 +89,40 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
       }
     );
 
-    const { data, error } = await supabase.auth.getClaims(token);
-    if (error || !data?.claims) {
-      throw new Error('Unauthorized: Invalid token');
-    }
+    try {
+      // Prefer validating via getClaims (verifies JWT locally when possible)
+      const { data, error } = await supabase.auth.getClaims(token);
+      if (error || !data?.claims) {
+        // Fallback: try fetching the user with the provided Authorization header
+        const { data: userData, error: userErr } = await supabase.auth.getUser();
+        if (userErr || !userData?.user?.id) {
+          console.error('[Supabase] token validation failed', { error, userErr });
+          throw new Error('Unauthorized: Invalid token');
+        }
 
-    if (!data.claims.sub) {
-      throw new Error('Unauthorized: No user ID found in token');
-    }
+        return next({
+          context: {
+            supabase,
+            userId: userData.user.id,
+            claims: null,
+          },
+        });
+      }
 
-    return next({
-      context: {
-        supabase,
-        userId: data.claims.sub,
-        claims: data.claims,
-      },
-    });
+      if (!data.claims.sub) {
+        throw new Error('Unauthorized: No user ID found in token');
+      }
+
+      return next({
+        context: {
+          supabase,
+          userId: data.claims.sub,
+          claims: data.claims,
+        },
+      });
+    } catch (err) {
+      console.error('[Supabase] auth middleware error', err);
+      throw err;
+    }
   },
 );

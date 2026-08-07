@@ -43,6 +43,7 @@ export interface InventoryItem {
   sellingPrice: number;
   wholesalePrice: number;
   costPrice: number;
+  reorderThreshold: number;
   currentStock: number;
   reservedStock: number;
   availableStock: number;
@@ -62,6 +63,18 @@ export interface InventoryQueryResult {
 
 class InventoryService {
   async getInventory(branchId: string): Promise<InventoryQueryResult> {
+    // Guard against SSR environments where IndexedDB is unavailable
+    if (typeof window === "undefined" || typeof indexedDB === "undefined") {
+      return {
+        items: [],
+        products: [],
+        balances: [],
+        categories: [],
+        units: [],
+        branch: null,
+      };
+    }
+
     const [products, balances, categories, units] = await Promise.all([
       productRepository.getAll(),
       inventoryBalanceRepository.getByBranch(branchId),
@@ -127,6 +140,7 @@ class InventoryService {
           sellingPrice: Number(product.retailPrice ?? 0),
           wholesalePrice: Number(product.wholesalePrice ?? 0),
           costPrice: Number(product.costPrice ?? 0),
+          reorderThreshold: Number(product.lowStockThreshold ?? 0),
           currentStock,
           reservedStock,
           availableStock: Math.max(0, currentStock - reservedStock),
@@ -136,7 +150,9 @@ class InventoryService {
         };
       });
 
-    const branch = (await db.branches.get(branchId)) ?? null;
+    const branch = typeof window !== "undefined" && typeof indexedDB !== "undefined"
+      ? (await db.branches.get(branchId)) ?? null
+      : null;
 
     return {
       items,
