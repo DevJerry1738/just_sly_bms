@@ -4,6 +4,7 @@ import { AlertTriangle, Eye, EyeOff, ShieldCheck, Layers, Zap } from "lucide-rea
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { DomainEvents } from "@/services/events/domain-events";
 import { APP_CONFIG } from "@/config/app";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -129,10 +130,16 @@ function AuthPage() {
     setPending(true);
     setAuthError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
     setPending(false);
 
     if (error) {
+      DomainEvents.publish("LOGIN_FAILED", {
+        userName: email,
+        description: `Failed login attempt for ${email}`,
+        reason: error.message,
+      });
+
       const message =
         "Invalid email or password. Please try again.";
       setAuthError(message);
@@ -140,8 +147,15 @@ function AuthPage() {
       return;
     }
 
-    toast.success("Welcome back.");
-    navigate({ to: "/", replace: true });
+    // Route wholesale customers to their portal, staff to the dashboard
+    const role = signInData.user?.user_metadata?.role as string | undefined;
+    if (role === "wholesale_customer") {
+      toast.success("Welcome to your wholesale portal.");
+      navigate({ to: "/portal/shop", replace: true });
+    } else {
+      toast.success("Welcome back.");
+      navigate({ to: "/", replace: true });
+    }
   }
 
   return (

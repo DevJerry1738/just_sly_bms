@@ -8,6 +8,7 @@ import { BranchSwitcher } from "@/components/layout/branch-switcher";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SyncStatusIndicator } from "@/components/offline/sync-status-indicator";
 import { PWAInstallButton } from "@/components/offline/pwa-install-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -60,14 +61,7 @@ export function AppTopbar() {
         <PWAInstallButton />
         <BranchSwitcher />
 
-        <Link
-          to="/notifications"
-          aria-label="Notifications"
-          className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "relative")}
-        >
-          <Bell className="size-4" />
-          <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
-        </Link>
+        <NotificationBell />
 
         <ThemeToggle />
 

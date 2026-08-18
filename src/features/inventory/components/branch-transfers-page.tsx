@@ -56,7 +56,7 @@ export function BranchTransfersPage({ branchId, refreshKey, onCreateClick, onVie
 
   const filteredTransfers = transfers.filter((t) => {
     if (filterType === "all") return true;
-    if (filterType === "sent") return t.sourceBranchId === branchId;
+    if (filterType === "sent") return t.sourceBranchId === branchId && t.status !== "cancelled";
     if (filterType === "received") return t.destinationBranchId === branchId;
     return true;
   });
@@ -69,7 +69,7 @@ export function BranchTransfersPage({ branchId, refreshKey, onCreateClick, onVie
     },
     {
       label: "Sent",
-      value: transfers.filter((t) => t.sourceBranchId === branchId).length.toString(),
+      value: transfers.filter((t) => t.sourceBranchId === branchId && t.status !== "cancelled").length.toString(),
       trend: "neutral",
     },
     {
@@ -135,7 +135,7 @@ export function BranchTransfersPage({ branchId, refreshKey, onCreateClick, onVie
 
       {/* Transfers List */}
       {error ? (
-        <ErrorState message={error} onRetry={loadTransfers} />
+        <ErrorState description={error} onRetry={loadTransfers} />
       ) : loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-slate-400" />

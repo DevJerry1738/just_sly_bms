@@ -108,6 +108,20 @@ class BranchContextService {
   }
 
   async setActiveBranchId(id: string, branches: BranchSchema[]): Promise<BranchResolutionResult> {
+    if (id === "ALL") {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(BranchContextService.STORAGE_KEY, "ALL");
+      }
+      const state: BranchResolutionResult = {
+        branches,
+        activeBranch: null,
+        status: "ready",
+        reason: undefined,
+      };
+      this.emit(state);
+      return state;
+    }
+
     const target = branches.find((branch) => branch.id === id) ?? null;
     if (!target) {
       return this.getCurrentState();

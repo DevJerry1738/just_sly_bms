@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { productRepository, generateProductCode } from "@/repositories/product.repository";
+import { productPackagingRepository } from "@/repositories/product-packaging.repository";
 import { categoryRepository } from "@/repositories/category.repository";
 import { unitOfMeasureRepository } from "@/repositories/unit-of-measure.repository";
 import type { CategorySchema, UnitOfMeasureSchema, ProductSchema } from "@/database/schema";
@@ -73,10 +74,19 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
         setBaseUnit(productToEdit.baseUnit);
         setTrackExpiry(productToEdit.trackExpiry);
         setLowStockThreshold(String(productToEdit.lowStockThreshold));
-        setCostPrice(String(productToEdit.costPrice));
+        setCostPrice(productToEdit.costPrice != null ? String(productToEdit.costPrice) : "");
         setRetailPrice(String(productToEdit.retailPrice));
         setWholesalePrice(String(productToEdit.wholesalePrice));
         setSupplyPrice(String(productToEdit.supplyPrice));
+
+        const existingPkgs = await productPackagingRepository.getPackagingForProduct(productToEdit.id);
+        setPackaging(
+          existingPkgs.map((p) => ({
+            label: p.label,
+            unitsPerPackage: p.unitsPerPackage,
+            sortOrder: p.sortOrder,
+          }))
+        );
       } else {
         resetForm();
         const autoCode = await generateProductCode();
@@ -123,11 +133,11 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
     setPackaging(updated);
   };
 
-  const parseNumericValue = (value: string, fallback: number) => {
+  const parseNumericValue = (value: string): number | null => {
     const trimmed = value.trim();
-    if (trimmed === "") return fallback;
+    if (trimmed === "") return null;
     const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : fallback;
+    return Number.isFinite(parsed) ? parsed : null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -145,8 +155,8 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
     setLoading(true);
     try {
       const resolvedCostPrice = canManageCost
-        ? parseNumericValue(costPrice, productToEdit?.costPrice ?? 0)
-        : productToEdit?.costPrice ?? 0;
+        ? parseNumericValue(costPrice) ?? productToEdit?.costPrice ?? null
+        : productToEdit?.costPrice ?? null;
 
       const sharedFields = {
         name: name.trim(),
@@ -302,7 +312,7 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {canManageCost && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="prod-cost">Cost Price *</Label>
+                  <Label htmlFor="prod-cost">Cost Price</Label>
                   <Input
                     id="prod-cost"
                     type="number"
@@ -311,7 +321,6 @@ export function ProductFormModal({ isOpen, onClose, onSuccess, productToEdit }: 
                     placeholder="0.00"
                     value={costPrice}
                     onChange={(e) => setCostPrice(e.target.value)}
-                    required
                   />
                 </div>
               )}

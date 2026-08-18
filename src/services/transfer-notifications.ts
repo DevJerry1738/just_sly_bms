@@ -1,6 +1,6 @@
 import { db } from "@/database/schema";
 import { inventoryTransferRepository } from "@/repositories/inventory-transfer.repository";
-import type { InventoryTransferSchema, TransferStatus } from "@/database/schema";
+import type { InventoryTransferSchema, TransferStatus, NotificationsSchema } from "@/database/schema";
 
 // ---------------------------------------------------------------------------
 // Transfer Notification Service
@@ -23,8 +23,10 @@ export class TransferNotificationService {
   /**
    * Generate notifications when transfer is created.
    */
-  static async notifyTransferCreated(transfer: InventoryTransferSchema): Promise<void> {
-    const recipients = await this.getRecipientsForBranch(transfer.sourceBranchId);
+  async notifyTransferCreated(transfer: InventoryTransferSchema): Promise<void> {
+    const sourceRecipients = await this.getRecipientsForBranch(transfer.sourceBranchId);
+    const destRecipients = await this.getRecipientsForBranch(transfer.destinationBranchId);
+    const recipients = [...new Set([...sourceRecipients, ...destRecipients])];
 
     const payload: NotificationPayload = {
       transferId: transfer.id,
@@ -35,7 +37,7 @@ export class TransferNotificationService {
       destinationBranch: transfer.destinationBranchId,
       createdBy: transfer.createdBy,
       recipients,
-      branchIds: [transfer.sourceBranchId],
+      branchIds: [transfer.sourceBranchId, transfer.destinationBranchId],
     };
 
     await this.createNotification(payload);
@@ -44,7 +46,7 @@ export class TransferNotificationService {
   /**
    * Generate notifications when transfer is dispatched.
    */
-  static async notifyTransferDispatched(transfer: InventoryTransferSchema): Promise<void> {
+  async notifyTransferDispatched(transfer: InventoryTransferSchema): Promise<void> {
     const sourceRecipients = await this.getRecipientsForBranch(transfer.sourceBranchId);
     const destRecipients = await this.getRecipientsForBranch(transfer.destinationBranchId);
     const recipients = [...new Set([...sourceRecipients, ...destRecipients])];
@@ -69,7 +71,7 @@ export class TransferNotificationService {
   /**
    * Generate notifications when transfer is received/pending receipt.
    */
-  static async notifyTransferPendingReceipt(transfer: InventoryTransferSchema): Promise<void> {
+  async notifyTransferPendingReceipt(transfer: InventoryTransferSchema): Promise<void> {
     const recipients = await this.getRecipientsForBranch(transfer.destinationBranchId);
 
     const payload: NotificationPayload = {
@@ -92,7 +94,7 @@ export class TransferNotificationService {
   /**
    * Generate notifications when transfer receipt is confirmed.
    */
-  static async notifyTransferReceived(transfer: InventoryTransferSchema): Promise<void> {
+  async notifyTransferReceived(transfer: InventoryTransferSchema): Promise<void> {
     const sourceRecipients = await this.getRecipientsForBranch(transfer.sourceBranchId);
     const destRecipients = await this.getRecipientsForBranch(transfer.destinationBranchId);
     const recipients = [...new Set([...sourceRecipients, ...destRecipients])];
@@ -117,7 +119,7 @@ export class TransferNotificationService {
   /**
    * Generate notifications when transfer is rejected.
    */
-  static async notifyTransferRejected(
+  async notifyTransferRejected(
     transfer: InventoryTransferSchema,
     reason?: string
   ): Promise<void> {
@@ -146,7 +148,7 @@ export class TransferNotificationService {
   /**
    * Generate notifications when transfer is cancelled.
    */
-  static async notifyTransferCancelled(
+  async notifyTransferCancelled(
     transfer: InventoryTransferSchema,
     reason?: string
   ): Promise<void> {
@@ -174,38 +176,59 @@ export class TransferNotificationService {
    * Create notifications in database.
    * In a full implementation, this would also send emails, SMS, etc.
    */
-  private static async createNotification(payload: NotificationPayload): Promise<void> {
+  private async createNotification(payload: NotificationPayload): Promise<void> {
     const title = this.getNotificationTitle(payload.event, payload.transferType);
     const message = this.getNotificationMessage(payload);
 
-    for (const recipient of payload.recipients) {
-      const notification = {
-        id: crypto.randomUUID(),
-        userId: recipient,
-        branchId: payload.branchIds?.[0] ?? payload.destinationBranch,
-        branchIds: payload.branchIds,
-        sourceBranchId: payload.sourceBranch,
-        destinationBranchId: payload.destinationBranch,
-        title,
-        message,
-        type: "transfer",
-        read: false,
-        metadata: {
-          transferId: payload.transferId,
-          transferNumber: payload.transferNumber,
-          event: payload.event,
-        },
-        createdAt: Date.now(),
-      } as Record<string, unknown>;
+    const baseNotification = {
+      id: crypto.randomUUID(),
+      branchId: payload.branchIds?.[0] ?? payload.destinationBranch,
+      branchIds: payload.branchIds,
+      sourceBranchId: payload.sourceBranch,
+      destinationBranchId: payload.destinationBranch,
+      title,
+      message,
+      type: "transfer",
+      read: false,
+      metadata: {
+        transferId: payload.transferId,
+        transferNumber: payload.transferNumber,
+        event: payload.event,
+      },
+      createdAt: Date.now(),
+    } as Record<string, unknown>;
 
-      await db.notifications.put(notification);
+    if (payload.recipients.length > 0) {
+      for (const recipient of payload.recipients) {
+        await db.notifications.put({
+          type: "branch_transfer_created",
+          title: `Transfer ${payload.transferNumber}`,
+          message: `Transfer ${payload.transferNumber} event ${payload.event}`,
+          priority: "info",
+          read: false,
+          ...baseNotification,
+          id: crypto.randomUUID(),
+          recipientUserId: recipient,
+        } as unknown as NotificationsSchema);
+      }
+      return;
     }
+
+    await db.notifications.put({
+      type: "branch_transfer_created",
+      title: `Transfer ${payload.transferNumber}`,
+      message: `Transfer ${payload.transferNumber} event ${payload.event}`,
+      priority: "info",
+      read: false,
+      ...baseNotification,
+      id: crypto.randomUUID(),
+    } as unknown as NotificationsSchema);
   }
 
   /**
    * Get staff recipients for a branch.
    */
-  private static async getRecipientsForBranch(branchId: string): Promise<string[]> {
+  private async getRecipientsForBranch(branchId: string): Promise<string[]> {
     const staff = await db.staff.toArray();
     return staff
       .filter((s) => s.branchId === branchId && s.status === "active")
@@ -216,7 +239,7 @@ export class TransferNotificationService {
   /**
    * Generate notification title based on event.
    */
-  private static getNotificationTitle(event: string, transferType: string): string {
+  private getNotificationTitle(event: string, transferType: string): string {
     const typeLabel = transferType === "hq_supply" ? "Supply" : "Transfer";
 
     const titles: Record<string, string> = {
@@ -234,7 +257,7 @@ export class TransferNotificationService {
   /**
    * Generate notification message based on event.
    */
-  private static getNotificationMessage(payload: NotificationPayload): string {
+  private getNotificationMessage(payload: NotificationPayload): string {
     const messages: Record<string, string> = {
       transfer_created: `New ${payload.transferType === "hq_supply" ? "supply" : "transfer"} created: ${payload.transferNumber}`,
       transfer_dispatched: `${payload.transferNumber} has been dispatched from ${payload.sourceBranch}`,

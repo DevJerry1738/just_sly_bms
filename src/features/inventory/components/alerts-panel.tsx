@@ -22,7 +22,68 @@ interface TransferNotificationRecord {
   metadata?: Record<string, unknown>;
 }
 
-export function AlertsPanel({ branchId }: { branchId?: string }) {
+interface AlertsPanelProps {
+  branchId?: string;
+  onAlertCountChange?: (count: number) => void;
+}
+
+export async function getRelevantTransferNotifications(
+  branchId?: string,
+  userId?: string | null,
+  userEmail?: string | null
+): Promise<TransferNotificationRecord[]> {
+  const allNotifications = await db.notifications.toArray();
+  const transferNotifications: TransferNotificationRecord[] = [];
+
+  for (const n of allNotifications) {
+    try {
+      if ((n.type as string) !== "transfer") continue;
+
+      const notification = n as TransferNotificationRecord;
+      const meta = notification.metadata as Record<string, unknown> | undefined;
+      const transferId = meta?.transferId as string | undefined;
+      const isDirectUserMatch = userId && notification.userId === userId;
+      const isDirectEmailMatch =
+        userEmail &&
+        notification.userId?.toLowerCase() === userEmail.toLowerCase();
+      const isBranchTargeted =
+        branchId &&
+        (notification.branchId === branchId ||
+          (Array.isArray(notification.branchIds) && notification.branchIds.includes(branchId)));
+      const isTransferBranchMatch =
+        branchId &&
+        (notification.sourceBranchId === branchId || notification.destinationBranchId === branchId);
+
+      if (isDirectUserMatch || isDirectEmailMatch || isBranchTargeted || isTransferBranchMatch) {
+        transferNotifications.push(notification);
+        continue;
+      }
+
+      if (branchId && transferId) {
+        const tr = await db.inventory_transfers.get(transferId);
+        if (tr && tr.destinationBranchId === branchId) {
+          transferNotifications.push(notification);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed evaluating notification", n, err);
+    }
+  }
+
+  transferNotifications.sort((a, b) => b.createdAt - a.createdAt);
+  return transferNotifications;
+}
+
+export async function countRelevantUnreadNotifications(
+  branchId?: string,
+  userId?: string | null,
+  userEmail?: string | null
+): Promise<number> {
+  const notifications = await getRelevantTransferNotifications(branchId, userId, userEmail);
+  return notifications.filter((notification) => !notification.read).length;
+}
+
+export function AlertsPanel({ branchId, onAlertCountChange }: AlertsPanelProps) {
   const { user } = useAuth();
   const [alerts, setAlerts] = useState<InventoryAlertSchema[]>([]);
   const [notifications, setNotifications] = useState<TransferNotificationRecord[]>([]);
@@ -36,46 +97,30 @@ export function AlertsPanel({ branchId }: { branchId?: string }) {
       await inventoryAlertRepository.generateLowStockAlerts();
 
       const active = await inventoryAlertRepository.getActiveAlerts(branchId);
-      let transferNotifications: TransferNotificationRecord[] = [];
+      let transferNotifications = await getRelevantTransferNotifications(
+        branchId,
+        user?.id,
+        user?.email
+      );
 
-      const allNotifications = await db.notifications.toArray();
-      for (const n of allNotifications) {
-        try {
-          if (n.type !== "transfer") continue;
-
-          const notification = n as TransferNotificationRecord;
-          const meta = notification.metadata as Record<string, unknown> | undefined;
-          const transferId = meta?.transferId as string | undefined;
-          const isDirectUserMatch =
-            user?.id && notification.userId === user.id;
-          const isDirectEmailMatch =
-            user?.email &&
-            notification.userId?.toLowerCase() === user.email.toLowerCase();
-          const isBranchTargeted =
-            branchId &&
-            (notification.branchId === branchId ||
-              (Array.isArray(notification.branchIds) && notification.branchIds.includes(branchId)));
-
-          if (isDirectUserMatch || isDirectEmailMatch || isBranchTargeted) {
-            transferNotifications.push(notification);
-            continue;
-          }
-
-          if (branchId && transferId) {
-            const tr = await db.inventory_transfers.get(transferId);
-            if (tr && tr.destinationBranchId === branchId) {
-              transferNotifications.push(notification);
-            }
-          }
-        } catch (err) {
-          console.warn("Failed evaluating notification", n, err);
-        }
+      const unreadNotifications = transferNotifications.filter((notification) => !notification.read);
+      if (unreadNotifications.length > 0) {
+        await Promise.all(
+          unreadNotifications.map((notification) =>
+            db.notifications.update(notification.id, { read: true })
+          )
+        );
+        transferNotifications = transferNotifications.map((notification) => ({
+          ...notification,
+          read: true,
+        }));
       }
-
-      transferNotifications.sort((a, b) => b.createdAt - a.createdAt);
 
       setAlerts(active);
       setNotifications(transferNotifications);
+      const badgeCount =
+        active.length + transferNotifications.filter((notification) => !notification.read).length;
+      onAlertCountChange?.(badgeCount);
     } catch (err) {
       console.error("Failed loading inventory alerts", err);
     } finally {

@@ -11,6 +11,7 @@ import { DispatchTransferModal } from "./dispatch-transfer-modal";
 import { ConfirmReceiptModal } from "./confirm-receipt-modal";
 import { AcceptTransferModal } from "./accept-transfer-modal";
 import { RejectTransferModal } from "./reject-transfer-modal";
+import { CancelTransferModal } from "./cancel-transfer-modal";
 import { TransferDetailView } from "./transfer-detail-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { InventoryTransferSchema } from "@/database/schema";
@@ -43,6 +44,10 @@ interface TransferManagementState {
     open: boolean;
     transferId?: string;
   };
+  cancelModal: {
+    open: boolean;
+    transferId?: string;
+  };
   activeTab: "hq" | "branch";
   refreshKey: number;
 }
@@ -58,6 +63,7 @@ export function TransferManagementPage() {
     receiptModal: { open: false },
     acceptModal: { open: false },
     rejectModal: { open: false },
+    cancelModal: { open: false, transferId: undefined },
     activeTab: "hq",
     refreshKey: 0,
   });
@@ -136,6 +142,13 @@ export function TransferManagementPage() {
     }));
   };
 
+  const handleCancel = (transferId: string) => {
+    setState((prev) => ({
+      ...prev,
+      cancelModal: { open: true, transferId },
+    }));
+  };
+
   const triggerRefresh = () => {
     setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));
   };
@@ -169,6 +182,7 @@ export function TransferManagementPage() {
           onReceipt={handleReceipt}
           onAccept={handleAccept}
           onReject={handleReject}
+          onCancel={handleCancel}
         />
       ) : (
         <>
@@ -286,6 +300,21 @@ export function TransferManagementPage() {
           transferId={state.rejectModal.transferId}
           transferNumber={state.selectedTransfer?.transferNumber || ""}
           sourceBranch={state.selectedTransfer?.sourceBranchId || ""}
+          onSuccess={handleWorkflowSuccess}
+        />
+      )}
+
+      {state.cancelModal.transferId && (
+        <CancelTransferModal
+          open={state.cancelModal.open}
+          onOpenChange={(open) =>
+            setState((prev) => ({
+              ...prev,
+              cancelModal: { open },
+            }))
+          }
+          transferId={state.cancelModal.transferId}
+          transferNumber={state.selectedTransfer?.transferNumber || ""}
           onSuccess={handleWorkflowSuccess}
         />
       )}

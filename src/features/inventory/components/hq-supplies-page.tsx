@@ -23,6 +23,7 @@ export function HQSuppliesPage({ branchId, refreshKey, onCreateClick, onViewClic
     sourceBranchName?: string;
     destinationBranchName?: string;
   }>>([]);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +52,10 @@ export function HQSuppliesPage({ branchId, refreshKey, onCreateClick, onViewClic
     loadTransfers();
   }, [branchId, refreshKey]);
 
+  const filteredTransfers = showCancelled
+    ? transfers.filter((transfer) => transfer.status === "cancelled")
+    : transfers;
+
   const stats = [
     {
       label: "Total Supplies",
@@ -71,6 +76,11 @@ export function HQSuppliesPage({ branchId, refreshKey, onCreateClick, onViewClic
       label: "Completed",
       value: transfers.filter((t) => t.status === "received").length.toString(),
       trend: "positive",
+    },
+    {
+      label: "Cancelled",
+      value: transfers.filter((t) => t.status === "cancelled").length.toString(),
+      trend: "negative",
     },
   ];
 
@@ -104,6 +114,23 @@ export function HQSuppliesPage({ branchId, refreshKey, onCreateClick, onViewClic
         {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-6">
+        <Button
+          variant={showCancelled ? "outline" : "secondary"}
+          size="sm"
+          onClick={() => setShowCancelled(false)}
+        >
+          All
+        </Button>
+        <Button
+          variant={showCancelled ? "secondary" : "outline"}
+          size="sm"
+          onClick={() => setShowCancelled(true)}
+        >
+          Cancelled
+        </Button>
       </div>
 
       {/* Supplies List */}
@@ -147,7 +174,7 @@ export function HQSuppliesPage({ branchId, refreshKey, onCreateClick, onViewClic
               </tr>
             </thead>
             <tbody className="divide-y">
-              {transfers.map((transfer) => (
+              {filteredTransfers.map((transfer) => (
                 <tr key={transfer.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4 text-sm font-medium text-slate-900">
                     {transfer.transferNumber}

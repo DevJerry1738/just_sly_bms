@@ -1,6 +1,7 @@
 import { BaseRepository } from "./base.repository";
 import { db, type ProductPackagingSchema } from "@/database/schema";
 import { DomainEvents } from "@/services/events/domain-events";
+import { SyncQueueService } from "@/services/sync/sync-queue";
 
 export class ProductPackagingRepository extends BaseRepository<ProductPackagingSchema> {
   constructor() {
@@ -12,6 +13,10 @@ export class ProductPackagingRepository extends BaseRepository<ProductPackagingS
       .where("productId")
       .equals(productId)
       .sortBy("sortOrder");
+  }
+
+  async getByProduct(productId: string): Promise<ProductPackagingSchema[]> {
+    return this.getPackagingForProduct(productId);
   }
 
   /**
@@ -26,6 +31,7 @@ export class ProductPackagingRepository extends BaseRepository<ProductPackagingS
     const existing = await this.getPackagingForProduct(productId);
     for (const pkg of existing) {
       await db.product_packaging.delete(pkg.id);
+      await SyncQueueService.enqueue("product_packaging", "DELETE", { id: pkg.id, productId });
     }
 
     if (levels.length === 0) return [];
@@ -43,6 +49,13 @@ export class ProductPackagingRepository extends BaseRepository<ProductPackagingS
     }));
 
     await db.product_packaging.bulkPut(records);
+    for (const record of records) {
+      await SyncQueueService.enqueue(
+        "product_packaging",
+        "UPSERT",
+        record as unknown as Record<string, unknown>
+      );
+    }
 
     await DomainEvents.publish("PACKAGING_UPDATED", {
       entity: "ProductPackaging",

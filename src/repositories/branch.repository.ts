@@ -16,6 +16,16 @@ export class BranchRepository extends BaseRepository<BranchSchema> {
   }
 
   /**
+   * Fetch the designated HQ branch.
+   */
+  async getHqBranch(): Promise<BranchSchema> {
+    const branches = await this.ensureSeedBranches();
+    const hq = branches.find((b) => b.isHq || b.code?.startsWith("HQ") || b.id === "branch-hq-lagos");
+    if (hq) return hq;
+    return branches[0];
+  }
+
+  /**
    * Initialize default seed branches if none exist in local storage.
    */
   async ensureSeedBranches(): Promise<BranchSchema[]> {
@@ -27,6 +37,7 @@ export class BranchRepository extends BaseRepository<BranchSchema> {
         id: "branch-hq-lagos",
         code: "HQ-001",
         name: "Lagos Central Flagship (HQ)",
+        isHq: true,
         organizationId: "default-org-001",
         email: "lagos@justsly.com",
         phone: "+234 1 700 0001",

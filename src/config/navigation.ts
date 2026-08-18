@@ -12,6 +12,7 @@ import {
   ScrollText,
   Settings,
   UserRound,
+  MonitorPlay,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,24 +38,35 @@ export const NAVIGATION: NavGroup[] = [
     label: "Overview",
     items: [
       { title: "Dashboard", url: "/", icon: LayoutDashboard, requiredPermission: "dashboard:view" },
-      { title: "Analytics", url: "/analytics", icon: LineChart, requiredPermission: "reports:view" },
-      { title: "Reports", url: "/reports", icon: FileBarChart, requiredPermission: "reports:view" },
     ],
   },
   {
     label: "Operations",
     items: [
-      { title: "Branches", url: "/branches", icon: Building2, requiredPermission: "branches:view" },
+      { title: "POS", url: "/pos", icon: MonitorPlay, requiredPermission: "sales:create" },
+      { title: "Wholesale Orders", url: "/wholesale-orders", icon: Truck, requiredPermission: "sales:view" },
+      { title: "Sales History", url: "/sales", icon: ShoppingCart, requiredPermission: "sales:view" },
+    ],
+  },
+  {
+    label: "Inventory",
+    items: [
       { title: "Products", url: "/products", icon: Package, requiredPermission: "products:view" },
       { title: "Inventory", url: "/inventory", icon: Boxes, requiredPermission: "inventory:view" },
     ],
   },
   {
-    label: "Commerce",
+    label: "Customers",
     items: [
-      { title: "Sales", url: "/sales", icon: ShoppingCart, requiredPermission: "sales:view" },
-      { title: "Wholesale Orders", url: "/wholesale-orders", icon: Truck, requiredPermission: "sales:view" },
       { title: "Customers", url: "/customers", icon: Users, requiredPermission: "customers:view" },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      { title: "Branches", url: "/branches", icon: Building2, requiredPermission: "branches:view" },
+      { title: "Staff", url: "/users", icon: UserRound, requiredPermission: "staff:view" },
+      { title: "Reports & Analytics", url: "/analytics", icon: LineChart, requiredPermission: "reports:view" },
     ],
   },
   {
@@ -62,9 +74,8 @@ export const NAVIGATION: NavGroup[] = [
     items: [
       { title: "Notifications", url: "/notifications", icon: Bell, requiredPermission: "notifications:view" },
       { title: "Audit Logs", url: "/audit-logs", icon: ScrollText, requiredPermission: "audit_logs:view" },
-      { title: "Users", url: "/users", icon: UserRound, requiredPermission: "staff:view" },
-      { title: "Profile", url: "/profile", icon: UserRound },
       { title: "Settings", url: "/settings", icon: Settings, requiredPermission: "settings:view" },
+      { title: "My Profile", url: "/profile", icon: UserRound },
     ],
   },
 ];

@@ -47,6 +47,12 @@ export class InventoryBatchRepository extends BaseRepository<InventoryBatchSchem
       entityId: batch.id,
       record: batch,
     });
+    // Trigger immediate expiry scan to notify if batch is expired or expiring soon
+    if (batch.expiryDate) {
+      import("@/services/notifications/expiry-scanner")
+        .then((m) => m.runExpiryScanner())
+        .catch(() => {});
+    }
     return batch;
   }
 

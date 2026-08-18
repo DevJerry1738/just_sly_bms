@@ -1,5 +1,6 @@
 import { Building2, Check, ChevronsUpDown } from "lucide-react";
 import { useBranch } from "@/providers/branch-provider";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,8 +14,11 @@ import { Badge } from "@/components/ui/badge";
 
 export function BranchSwitcher() {
   const { activeBranch, branches, setActiveBranchId } = useBranch();
+  const { isSuperAdmin, isBranchManager } = useAuthorization();
 
   if (!branches.length) return null;
+
+  const canSeeAllBranches = isSuperAdmin || isBranchManager;
 
   return (
     <DropdownMenu>
@@ -27,7 +31,7 @@ export function BranchSwitcher() {
         >
           <Building2 className="size-3.5 text-primary shrink-0" />
           <span className="max-w-36 truncate font-semibold text-foreground">
-            {activeBranch?.name ?? "Select Branch"}
+            {activeBranch ? activeBranch.name : "All Branches"}
           </span>
           <ChevronsUpDown className="size-3 text-muted-foreground opacity-70 shrink-0 ml-auto" />
         </Button>
@@ -37,6 +41,21 @@ export function BranchSwitcher() {
           Active Branch Context
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {canSeeAllBranches && (
+          <>
+            <DropdownMenuItem
+              onClick={() => setActiveBranchId("ALL")}
+              className="flex items-center justify-between text-xs py-2 cursor-pointer font-medium"
+            >
+              <div className="flex flex-col min-w-0 pr-2">
+                <span className="font-semibold truncate text-foreground">All Branches</span>
+                <span className="text-[10px] text-muted-foreground font-mono">Global Business Overview</span>
+              </div>
+              {activeBranch === null && <Check className="size-3.5 text-primary" />}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {branches.map((b) => {
           const isSelected = activeBranch?.id === b.id;
           return (

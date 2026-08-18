@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Plus, Search, Upload, Tag, Archive, RefreshCw, Edit3 } from "lucide-react";
+import { Plus, Search, Upload, Tag, Archive, RefreshCw, Edit3, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { productRepository } from "@/repositories/product.repository";
+import { productPackagingRepository } from "@/repositories/product-packaging.repository";
 import { categoryRepository } from "@/repositories/category.repository";
 import { unitOfMeasureRepository } from "@/repositories/unit-of-measure.repository";
 import { useAuthorization } from "@/hooks/use-authorization";
@@ -13,7 +14,7 @@ import { useBranch } from "@/providers/branch-provider";
 import { ProductImportModal } from "./product-import-modal";
 import { ProductFormModal } from "./product-form-modal";
 import { CategoryManagerModal } from "./category-manager-modal";
-import type { ProductSchema, CategorySchema, UnitOfMeasureSchema } from "@/database/schema";
+import type { ProductSchema, CategorySchema, UnitOfMeasureSchema, ProductPackagingSchema } from "@/database/schema";
 
 export function ProductsPage() {
   const { hasPermission } = useAuthorization();
@@ -26,6 +27,7 @@ export function ProductsPage() {
   const [products, setProducts] = useState<ProductSchema[]>([]);
   const [categories, setCategories] = useState<CategorySchema[]>([]);
   const [units, setUnits] = useState<UnitOfMeasureSchema[]>([]);
+  const [packagingMap, setPackagingMap] = useState<Record<string, ProductPackagingSchema[]>>({});
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [showArchived, setShowArchived] = useState(false);
@@ -49,11 +51,20 @@ export function ProductsPage() {
         setProducts([]);
         setCategories(cats);
         setUnits(uoms);
+        setPackagingMap({});
         return;
       }
       setProducts(prods);
       setCategories(cats);
       setUnits(uoms);
+
+      const pkgEntries = await Promise.all(
+        prods.map(async (p) => {
+          const pkgs = await productPackagingRepository.getPackagingForProduct(p.id);
+          return [p.id, pkgs] as const;
+        })
+      );
+      setPackagingMap(Object.fromEntries(pkgEntries));
     } catch (err) {
       console.error("Failed loading product data", err);
     } finally {
@@ -238,10 +249,21 @@ export function ProductsPage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="p-3 text-xs">{p.baseUnit}</td>
+                    <td className="p-3 text-xs">
+                      <div className="font-medium">{p.baseUnit}</div>
+                      {packagingMap[p.id] && packagingMap[p.id].length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {packagingMap[p.id].map((pkg) => (
+                            <Badge key={pkg.id} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                              {pkg.label} ({pkg.unitsPerPackage})
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     {canViewCost && (
                       <td className="p-3 text-right font-mono font-medium">
-                        ₦{p.costPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        ₦{(p.costPrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                     )}
                     <td className="p-3 text-right font-mono font-medium text-emerald-600 dark:text-emerald-400">

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
+import { DomainEvents } from "@/services/events/domain-events";
 import type { AppRole, AuthState, Profile } from "@/types/auth";
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -32,6 +33,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
+
+      if (event === "SIGNED_IN" && next?.user) {
+        DomainEvents.publish("LOGIN_SUCCESS", {
+          userId: next.user.id,
+          userName: next.user.email || "User",
+          description: `User ${next.user.email} logged in successfully`,
+        }, { userId: next.user.id });
+      } else if (event === "SIGNED_OUT") {
+        DomainEvents.publish("LOGOUT", {
+          description: "User logged out",
+        });
+      }
+
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();

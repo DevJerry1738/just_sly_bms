@@ -14,7 +14,16 @@ export class OrganizationRepository extends BaseRepository<OrganizationSchema> {
   async getPrimaryOrganization(): Promise<OrganizationSchema> {
     const orgs = await this.getAll();
     if (orgs.length > 0 && orgs[0]) {
-      return orgs[0];
+      const org = orgs[0];
+      // Backfill default bank details if not set
+      if (!org.bank_name || !org.bank_account_number) {
+        org.bank_name = org.bank_name || "Access Bank Plc";
+        org.bank_account_number = org.bank_account_number || "0123456789";
+        org.bank_account_name = org.bank_account_name || "Just Sly Business Solutions Ltd";
+        org.bank_instructions = org.bank_instructions || "Please use your Order Number (e.g. WO-0001) as the transfer reference/narration.";
+        await db.organizations.put(org);
+      }
+      return org;
     }
 
     const defaultOrg: OrganizationSchema = {
@@ -37,6 +46,10 @@ export class OrganizationRepository extends BaseRepository<OrganizationSchema> {
       receipt_footer: "Goods sold in good condition are not returnable.",
       receipt_tax_note: "All prices are inclusive of 15% VAT & Levies.",
       show_receipt_logo: true,
+      bank_name: "Access Bank Plc",
+      bank_account_number: "0123456789",
+      bank_account_name: "Just Sly Business Solutions Ltd",
+      bank_instructions: "Please use your Order Number (e.g. WO-0001) as the transfer reference/narration.",
       updated_at: Date.now(),
       sync_status: "synced",
     };
@@ -62,3 +75,5 @@ export class OrganizationRepository extends BaseRepository<OrganizationSchema> {
     return updated;
   }
 }
+
+export const organizationRepository = new OrganizationRepository();

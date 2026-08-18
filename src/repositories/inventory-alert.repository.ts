@@ -35,6 +35,8 @@ export class InventoryAlertRepository extends BaseRepository<InventoryAlertSchem
 
   /** Generate (or refresh) expiry alerts from current batch data. Deduplicates by (productId, branchId, type, batchId). */
   async generateExpiryAlerts(): Promise<InventoryAlertSchema[]> {
+    await this.removeDuplicateActiveAlerts();
+
     const batches = await db.inventory_batches
       .filter((b) => b.status === "active" && !!b.expiryDate)
       .toArray();
@@ -55,15 +57,15 @@ export class InventoryAlertRepository extends BaseRepository<InventoryAlertSchem
 
       if (!type) continue;
 
-      // Dedup check
+      // Dedup check: do not recreate the same alert if one already exists,
+      // even if it has been acknowledged.
       const existing = await db.inventory_alerts
         .filter(
           (a) =>
             a.productId === batch.productId &&
             a.branchId === batch.branchId &&
             a.batchId === batch.id &&
-            a.type === type &&
-            !a.acknowledged
+            a.type === type
         )
         .first();
       if (existing) continue;
@@ -107,6 +109,8 @@ export class InventoryAlertRepository extends BaseRepository<InventoryAlertSchem
 
   /** Generate low-stock / out-of-stock alerts from current balances. */
   async generateLowStockAlerts(): Promise<InventoryAlertSchema[]> {
+    await this.removeDuplicateActiveAlerts();
+
     const balances = await db.inventory_balances.toArray();
     const products = await db.products.toArray();
     const productMap = new Map(products.map((p) => [p.id, p]));
@@ -131,8 +135,7 @@ export class InventoryAlertRepository extends BaseRepository<InventoryAlertSchem
           (a) =>
             a.productId === balance.productId &&
             a.branchId === balance.branchId &&
-            a.type === type &&
-            !a.acknowledged
+            a.type === type
         )
         .first();
       if (existing) continue;
@@ -170,6 +173,35 @@ export class InventoryAlertRepository extends BaseRepository<InventoryAlertSchem
     }
 
     return created;
+  }
+
+  private async removeDuplicateActiveAlerts(): Promise<void> {
+    const activeAlerts = await db.inventory_alerts
+      .filter((a) => !a.acknowledged)
+      .toArray();
+
+    const seen = new Map<string, InventoryAlertSchema>();
+    const duplicates: string[] = [];
+
+    for (const alert of activeAlerts) {
+      const key = `${alert.productId}::${alert.branchId}::${alert.type}::${alert.batchId ?? "<none>"}`;
+      const existing = seen.get(key);
+
+      if (!existing) {
+        seen.set(key, alert);
+        continue;
+      }
+
+      const keep = existing.createdAt >= alert.createdAt ? existing : alert;
+      const remove = keep === existing ? alert : existing;
+
+      seen.set(key, keep);
+      duplicates.push(remove.id);
+    }
+
+    if (duplicates.length > 0) {
+      await db.inventory_alerts.bulkDelete(duplicates);
+    }
   }
 
   async acknowledgeAlert(alertId: string, userId: string, userName?: string): Promise<void> {

@@ -18,7 +18,9 @@ import { Route as AuthenticatedAuditLogsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedBranchesRouteImport } from './routes/_authenticated/branches'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
 import { Route as AuthenticatedInventoryRouteImport } from './routes/_authenticated/inventory'
+import { Route as AuthenticatedNotificationPreferencesRouteImport } from './routes/_authenticated/notification-preferences'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
+import { Route as AuthenticatedPosRouteImport } from './routes/_authenticated/pos'
 import { Route as AuthenticatedProductsRouteImport } from './routes/_authenticated/products'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticated/reports'
@@ -26,6 +28,9 @@ import { Route as AuthenticatedSalesRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedUsersRouteImport } from './routes/_authenticated/users'
 import { Route as AuthenticatedWholesaleOrdersRouteImport } from './routes/_authenticated/wholesale-orders'
+import { Route as PortalLoginRouteImport } from './routes/portal/login'
+import { Route as PortalOrdersRouteImport } from './routes/portal/orders'
+import { Route as PortalShopRouteImport } from './routes/portal/shop'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -71,12 +76,23 @@ const AuthenticatedInventoryRoute = AuthenticatedInventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedNotificationPreferencesRoute =
+  AuthenticatedNotificationPreferencesRouteImport.update({
+    id: '/notification-preferences',
+    path: '/notification-preferences',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedNotificationsRoute =
   AuthenticatedNotificationsRouteImport.update({
     id: '/notifications',
     path: '/notifications',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedPosRoute = AuthenticatedPosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedProductsRoute = AuthenticatedProductsRouteImport.update({
   id: '/products',
   path: '/products',
@@ -113,6 +129,21 @@ const AuthenticatedWholesaleOrdersRoute =
     path: '/wholesale-orders',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const PortalLoginRoute = PortalLoginRouteImport.update({
+  id: '/portal/login',
+  path: '/portal/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalOrdersRoute = PortalOrdersRouteImport.update({
+  id: '/portal/orders',
+  path: '/portal/orders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalShopRoute = PortalShopRouteImport.update({
+  id: '/portal/shop',
+  path: '/portal/shop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -123,7 +154,9 @@ export interface FileRoutesByFullPath {
   '/branches': typeof AuthenticatedBranchesRoute
   '/customers': typeof AuthenticatedCustomersRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/notification-preferences': typeof AuthenticatedNotificationPreferencesRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
+  '/pos': typeof AuthenticatedPosRoute
   '/products': typeof AuthenticatedProductsRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/reports': typeof AuthenticatedReportsRoute
@@ -131,6 +164,9 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/wholesale-orders': typeof AuthenticatedWholesaleOrdersRoute
+  '/portal/login': typeof PortalLoginRoute
+  '/portal/orders': typeof PortalOrdersRoute
+  '/portal/shop': typeof PortalShopRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
@@ -140,7 +176,9 @@ export interface FileRoutesByTo {
   '/branches': typeof AuthenticatedBranchesRoute
   '/customers': typeof AuthenticatedCustomersRoute
   '/inventory': typeof AuthenticatedInventoryRoute
+  '/notification-preferences': typeof AuthenticatedNotificationPreferencesRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
+  '/pos': typeof AuthenticatedPosRoute
   '/products': typeof AuthenticatedProductsRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/reports': typeof AuthenticatedReportsRoute
@@ -148,6 +186,9 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/users': typeof AuthenticatedUsersRoute
   '/wholesale-orders': typeof AuthenticatedWholesaleOrdersRoute
+  '/portal/login': typeof PortalLoginRoute
+  '/portal/orders': typeof PortalOrdersRoute
+  '/portal/shop': typeof PortalShopRoute
   '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesById {
@@ -160,7 +201,9 @@ export interface FileRoutesById {
   '/_authenticated/branches': typeof AuthenticatedBranchesRoute
   '/_authenticated/customers': typeof AuthenticatedCustomersRoute
   '/_authenticated/inventory': typeof AuthenticatedInventoryRoute
+  '/_authenticated/notification-preferences': typeof AuthenticatedNotificationPreferencesRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
+  '/_authenticated/pos': typeof AuthenticatedPosRoute
   '/_authenticated/products': typeof AuthenticatedProductsRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/reports': typeof AuthenticatedReportsRoute
@@ -168,6 +211,9 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/users': typeof AuthenticatedUsersRoute
   '/_authenticated/wholesale-orders': typeof AuthenticatedWholesaleOrdersRoute
+  '/portal/login': typeof PortalLoginRoute
+  '/portal/orders': typeof PortalOrdersRoute
+  '/portal/shop': typeof PortalShopRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
@@ -181,7 +227,9 @@ export interface FileRouteTypes {
     | '/branches'
     | '/customers'
     | '/inventory'
+    | '/notification-preferences'
     | '/notifications'
+    | '/pos'
     | '/products'
     | '/profile'
     | '/reports'
@@ -189,6 +237,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/users'
     | '/wholesale-orders'
+    | '/portal/login'
+    | '/portal/orders'
+    | '/portal/shop'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -198,7 +249,9 @@ export interface FileRouteTypes {
     | '/branches'
     | '/customers'
     | '/inventory'
+    | '/notification-preferences'
     | '/notifications'
+    | '/pos'
     | '/products'
     | '/profile'
     | '/reports'
@@ -206,6 +259,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/users'
     | '/wholesale-orders'
+    | '/portal/login'
+    | '/portal/orders'
+    | '/portal/shop'
     | '/'
   id:
     | '__root__'
@@ -217,7 +273,9 @@ export interface FileRouteTypes {
     | '/_authenticated/branches'
     | '/_authenticated/customers'
     | '/_authenticated/inventory'
+    | '/_authenticated/notification-preferences'
     | '/_authenticated/notifications'
+    | '/_authenticated/pos'
     | '/_authenticated/products'
     | '/_authenticated/profile'
     | '/_authenticated/reports'
@@ -225,6 +283,9 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/users'
     | '/_authenticated/wholesale-orders'
+    | '/portal/login'
+    | '/portal/orders'
+    | '/portal/shop'
     | '/_authenticated/'
   fileRoutesById: FileRoutesById
 }
@@ -232,6 +293,9 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  PortalLoginRoute: typeof PortalLoginRoute
+  PortalOrdersRoute: typeof PortalOrdersRoute
+  PortalShopRoute: typeof PortalShopRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -299,11 +363,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInventoryRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/notification-preferences': {
+      id: '/_authenticated/notification-preferences'
+      path: '/notification-preferences'
+      fullPath: '/notification-preferences'
+      preLoaderRoute: typeof AuthenticatedNotificationPreferencesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/notifications': {
       id: '/_authenticated/notifications'
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof AuthenticatedNotificationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pos': {
+      id: '/_authenticated/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof AuthenticatedPosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/products': {
@@ -355,6 +433,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWholesaleOrdersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/portal/login': {
+      id: '/portal/login'
+      path: '/portal/login'
+      fullPath: '/portal/login'
+      preLoaderRoute: typeof PortalLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/orders': {
+      id: '/portal/orders'
+      path: '/portal/orders'
+      fullPath: '/portal/orders'
+      preLoaderRoute: typeof PortalOrdersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/shop': {
+      id: '/portal/shop'
+      path: '/portal/shop'
+      fullPath: '/portal/shop'
+      preLoaderRoute: typeof PortalShopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -364,7 +463,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBranchesRoute: typeof AuthenticatedBranchesRoute
   AuthenticatedCustomersRoute: typeof AuthenticatedCustomersRoute
   AuthenticatedInventoryRoute: typeof AuthenticatedInventoryRoute
+  AuthenticatedNotificationPreferencesRoute: typeof AuthenticatedNotificationPreferencesRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
+  AuthenticatedPosRoute: typeof AuthenticatedPosRoute
   AuthenticatedProductsRoute: typeof AuthenticatedProductsRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedReportsRoute: typeof AuthenticatedReportsRoute
@@ -381,7 +482,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBranchesRoute: AuthenticatedBranchesRoute,
   AuthenticatedCustomersRoute: AuthenticatedCustomersRoute,
   AuthenticatedInventoryRoute: AuthenticatedInventoryRoute,
+  AuthenticatedNotificationPreferencesRoute:
+    AuthenticatedNotificationPreferencesRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
+  AuthenticatedPosRoute: AuthenticatedPosRoute,
   AuthenticatedProductsRoute: AuthenticatedProductsRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedReportsRoute: AuthenticatedReportsRoute,
@@ -399,6 +503,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  PortalLoginRoute: PortalLoginRoute,
+  PortalOrdersRoute: PortalOrdersRoute,
+  PortalShopRoute: PortalShopRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

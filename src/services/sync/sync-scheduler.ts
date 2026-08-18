@@ -144,6 +144,14 @@ export class SyncScheduler {
           }
         }
       }
+
+      // 3. Catch up pending product packaging
+      const localPkgs = await db.product_packaging.toArray();
+      for (const pkg of localPkgs) {
+        if (!queuedIds.has(pkg.id) && pkg.sync_status === "pending") {
+          await SyncQueueService.enqueue("product_packaging", "UPSERT", pkg as unknown as Record<string, unknown>);
+        }
+      }
     } catch (err) {
       console.warn("[SyncScheduler] Error during local data catch-up:", err);
     }

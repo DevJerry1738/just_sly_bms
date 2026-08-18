@@ -30,3 +30,23 @@ export { inventoryAdjustmentRepository, InventoryAdjustmentRepository } from "./
 export { inventoryAlertRepository, InventoryAlertRepository } from "./inventory-alert.repository";
 export { stockCountRepository, StockCountRepository } from "./stock-count.repository";
 
+// Sprint 6 — Retail POS
+export { saleItemsRepository, SaleItemsRepository } from "./sale-items.repository";
+export { salePaymentsRepository, SalePaymentsRepository } from "./sale-payments.repository";
+export { saleVoidsRepository, SaleVoidsRepository } from "./sale-voids.repository";
+
+// Sprint 7 — Wholesale Portal
+export { customerRepository, CustomerRepository } from "./customer.repository";
+export { wholesaleOrderRepository, WholesaleOrderRepository } from "./wholesale-order.repository";
+export { wholesaleOrderItemRepository, WholesaleOrderItemRepository } from "./wholesale-order-item.repository";
+export { paymentReceiptRepository, PaymentReceiptRepository } from "./payment-receipt.repository";
+export { invoiceRepository, InvoiceRepository } from "./invoice.repository";
+
+// Organization settings (bank transfer, branding)
+export { organizationRepository, OrganizationRepository, DEFAULT_ORGANIZATION_ID } from "./organization.repository";
+
+// Sprint 8 — Notifications
+export { notificationRepository, NotificationRepository } from "./notification.repository";
+export { notificationDeliveryRepository, NotificationDeliveryRepository } from "./notification-delivery.repository";
+export { notificationPreferenceRepository, NotificationPreferenceRepository } from "./notification-preference.repository";
+

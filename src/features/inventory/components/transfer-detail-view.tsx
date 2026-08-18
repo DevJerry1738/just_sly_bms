@@ -24,6 +24,7 @@ interface TransferDetailViewProps {
   onReceipt?: (transferId: string) => void;
   onAccept?: (transferId: string) => void;
   onReject?: (transferId: string) => void;
+  onCancel?: (transferId: string) => void;
 }
 
 interface TransferDetail {
@@ -44,7 +45,9 @@ export function TransferDetailView({
   onBack,
   onDispatch,
   onReceipt,
+  onAccept,
   onReject,
+  onCancel,
 }: TransferDetailViewProps) {
   const [data, setData] = useState<TransferDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,7 +84,7 @@ export function TransferDetailView({
   }
 
   if (error || !data?.transfer) {
-    return <ErrorState message={error || "Transfer not found"} />;
+    return <ErrorState description={error || "Transfer not found"} />;
   }
 
   const transfer = data.transfer;
@@ -97,6 +100,7 @@ export function TransferDetailView({
   };
 
   const canDispatch = transfer.status === "draft" || transfer.status === "pending_dispatch";
+  const canCancel = transfer.status === "draft" || transfer.status === "pending_dispatch";
   const canReceipt = transfer.status === "dispatched" || transfer.status === "in_transit";
   const canAccept = transfer.status === "pending_receipt";
   const canReject = transfer.status === "pending_receipt" || transfer.status === "dispatched";
@@ -218,9 +222,15 @@ export function TransferDetailView({
                         {item.packagingUnit || "Base"}
                       </td>
                       <td className="px-4 py-2 text-right">{item.convertedBaseQuantity}</td>
-                      <td className="px-4 py-2 text-right">₦{item.unitCostSnapshot.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-2 text-right">
+                        {item.unitCostSnapshot != null
+                          ? `₦${item.unitCostSnapshot.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                          : "—"}
+                      </td>
                       <td className="px-4 py-2 text-right font-medium">
-                        ₦{(item.convertedBaseQuantity * item.unitCostSnapshot).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        {item.unitCostSnapshot != null
+                          ? `₦${(item.convertedBaseQuantity * item.unitCostSnapshot).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                          : "—"}
                       </td>
                     </tr>
                   ))}
@@ -248,6 +258,11 @@ export function TransferDetailView({
             onClick={() => onDispatch(transferId, transfer, data.stats)}
           >
             Dispatch Transfer
+          </Button>
+        )}
+        {canCancel && onCancel && (
+          <Button onClick={() => onCancel(transferId)} variant="destructive">
+            Cancel Transfer
           </Button>
         )}
         {canReceipt && onReceipt && (

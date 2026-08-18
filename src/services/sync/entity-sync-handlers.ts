@@ -125,6 +125,31 @@ SyncManager.registerHandler("products", async (operationType, payload) => {
   return { success: !error, error: error?.message };
 });
 
+// Product Packaging Handler
+SyncManager.registerHandler("product_packaging", async (operationType, payload) => {
+  if (operationType === "DELETE") {
+    const id = payload["id"] as string;
+    const { error } = await client.from("product_packaging").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+
+  const remoteRecord = {
+    id: payload["id"],
+    product_id: payload["productId"],
+    label: payload["label"],
+    units_per_package: payload["unitsPerPackage"],
+    sort_order: payload["sortOrder"] ?? 0,
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+    updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
+  };
+
+  const { error } = await client.from("product_packaging").upsert(remoteRecord, { onConflict: "id" });
+  if (!error) {
+    await db.product_packaging.update(payload["id"] as string, { sync_status: "synced" });
+  }
+  return { success: !error, error: error?.message };
+});
+
 // 4. Inventory Handler (Stub legacy table)
 SyncManager.registerHandler("inventory", async (operationType, payload) => {
   if (operationType === "DELETE") {

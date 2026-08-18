@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Boxes,
   LayoutDashboard,
@@ -12,10 +12,12 @@ import {
   ArrowUpDown,
   Send,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useBranch } from "@/providers/branch-provider";
+import { useAuth } from "@/providers/auth-provider";
 import { InventoryDashboard } from "./inventory-dashboard";
 import { CurrentStockTable } from "./current-stock-table";
 import { TransactionHistoryTable } from "./transaction-history-table";
@@ -27,16 +29,21 @@ import { TransferManagementPage } from "./transfer-management-page";
 import { OpeningStockModal } from "./opening-stock-modal";
 import { AdjustmentModal } from "./adjustment-modal";
 import { clearLocalDatabase } from "@/database";
+import { inventoryAlertRepository } from "@/repositories/inventory-alert.repository";
+import { countRelevantUnreadNotifications } from "./alerts-panel";
+import { db } from "@/database/schema";
 import type { BranchSchema } from "@/database/schema";
 
 export function InventoryPage() {
   const { hasPermission, isSuperAdmin } = useAuthorization();
+  const { user } = useAuth();
   const { activeBranch, branches, setActiveBranchId } = useBranch();
   const canAdjust = hasPermission("inventory:adjust") || hasPermission("inventory:create");
   const branchId = activeBranch?.id ?? "";
   const canSelectBranch = isSuperAdmin;
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isResettingLocalData, setIsResettingLocalData] = useState(false);
+  const [alertBadgeCount, setAlertBadgeCount] = useState(0);
 
   // Modals
   const [isOpeningStockOpen, setIsOpeningStockOpen] = useState(false);
@@ -46,6 +53,24 @@ export function InventoryPage() {
   const triggerRefresh = () => {
     setRefreshKey((prev) => prev + 1);
   };
+
+  const loadAlertBadgeCount = async () => {
+    try {
+      const unreadNotificationCount = await countRelevantUnreadNotifications(
+        branchId,
+        user?.id,
+        user?.email
+      );
+      const activeAlerts = await inventoryAlertRepository.getActiveAlerts(branchId);
+      setAlertBadgeCount(unreadNotificationCount + activeAlerts.length);
+    } catch (err) {
+      console.error("Failed to load alert badge count", err);
+    }
+  };
+
+  useEffect(() => {
+    void loadAlertBadgeCount();
+  }, [branchId]);
 
   const handleResetLocalData = async () => {
     if (!window.confirm("This will clear all local IndexedDB data and reload the app. Continue?")) {
@@ -140,6 +165,11 @@ export function InventoryPage() {
           </TabsTrigger>
           <TabsTrigger value="alerts" className="gap-1.5 text-xs">
             <Bell className="w-3.5 h-3.5" /> Alerts
+            {alertBadgeCount > 0 && (
+              <Badge className="ml-2" variant="secondary">
+                {alertBadgeCount}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -172,7 +202,10 @@ export function InventoryPage() {
         </TabsContent>
 
         <TabsContent value="alerts" key={`alt-${refreshKey}`}>
-          <AlertsPanel branchId={branchId} />
+          <AlertsPanel
+            branchId={branchId}
+            onAlertCountChange={(count) => setAlertBadgeCount(count)}
+          />
         </TabsContent>
       </Tabs>
 

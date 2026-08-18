@@ -75,8 +75,15 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   return <BranchContext.Provider value={value}>{children}</BranchContext.Provider>;
 }
 
+const defaultBranchContext: BranchContextValue = {
+  activeBranch: null,
+  branches: [],
+  setActiveBranchId: () => {},
+  isLoading: false,
+  refetchBranches: async () => {},
+};
+
 export function useBranch() {
   const ctx = useContext(BranchContext);
-  if (!ctx) throw new Error("useBranch must be used within <BranchProvider>");
-  return ctx;
+  return ctx || defaultBranchContext;
 }

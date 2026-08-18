@@ -33,16 +33,163 @@ export interface InventorySchema {
 export interface SalesSchema {
   id: string;
   branchId: string;
-  status: string;
+  saleNumber: string;
+  status: "draft" | "completed" | "voided" | "pending";
+  paymentStatus: "pending" | "paid" | "partial";
+  subtotal: number;
+  discountAmount: number;
+  totalAmount: number;
+  amountTendered: number;
+  currency: string;
+  paymentMethod: "cash" | "bank_transfer" | "card" | "mixed";
+  createdBy: string;
+  createdByName?: string;
+  completedAt?: number;
+  voidedAt?: number;
+  notes?: string;
   createdAt: number;
+  updatedAt: number;
+  sync_status?: "synced" | "pending" | "error";
   [key: string]: unknown;
 }
 
-export interface OrdersSchema {
+export interface SaleItemSchema {
   id: string;
-  branchId: string;
+  saleId: string;
+  productId: string;
+  productName: string;
+  packagingLabel?: string;
+  quantity: number;
+  baseQuantity: number;
+  unitPrice: number;
+  costPrice: number;
+  subtotal: number;
+  createdAt: number;
+  sync_status?: "synced" | "pending" | "error";
+}
+
+export interface SalePaymentSchema {
+  id: string;
+  saleId: string;
+  method: "cash" | "bank_transfer" | "card";
+  status: "pending" | "paid" | "failed";
+  amount: number;
+  reference?: string;
+  createdAt: number;
+  sync_status?: "synced" | "pending" | "error";
+}
+
+export interface SaleVoidSchema {
+  id: string;
+  saleId: string;
+  reason: string;
+  voidedBy: string;
+  createdAt: number;
+  inventoryReversed: boolean;
+  sync_status?: "synced" | "pending" | "error";
+}
+
+export interface WholesaleOrderSchema {
+  id: string;
+  orderNumber: string;
+  customerId: string;
+  hqBranchId: string;
+  status: WholesaleOrderStatus;
+  paymentStatus: "pending" | "submitted" | "confirmed" | "rejected";
+  subtotal: number;
+  discountAmount: number;
+  totalAmount: number;
+  currency: string;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+  sync_status?: "synced" | "pending" | "error";
+  [key: string]: unknown;
+}
+
+export type WholesaleOrderStatus =
+  | "pending_payment"
+  | "payment_submitted"
+  | "payment_confirmed"
+  | "processing"
+  | "ready"
+  | "dispatched"
+  | "delivered"
+  | "cancelled";
+
+export interface WholesaleOrderItemSchema {
+  id: string;
+  orderId: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  sellingUnit: string;
+  unitsPerPackage: number;
+  quantity: number;
+  baseQuantity: number;
+  unitPriceSnapshot: number;
+  costPriceSnapshot: number;
+  subtotal: number;
+  createdAt: number;
+  sync_status?: "synced" | "pending" | "error";
+}
+
+export interface OrderStatusHistorySchema {
+  id: string;
+  orderId: string;
+  fromStatus?: string;
+  toStatus: string;
+  changedBy: string;
+  reason?: string;
+  timestamp: number;
+}
+
+export interface OrderPaymentSchema {
+  id: string;
+  orderId: string;
+  amount: number;
   status: string;
   createdAt: number;
+}
+
+export interface PaymentReceiptSchema {
+  id: string;
+  orderId: string;
+  fileName: string;
+  bankName?: string;
+  transferReference?: string;
+  storagePath: string;
+  uploadedAt: number;
+}
+
+export interface InvoiceSchema {
+  id: string;
+  orderId: string;
+  invoiceNumber: string;
+  amount: number;
+  issuedAt: number;
+}
+
+export type CustomerAccountStatus = "active" | "inactive" | "suspended";
+
+export interface CustomerAccountSchema {
+  id: string;
+  authUserId?: string;
+  customerCode: string;
+  businessName?: string;
+  contactName: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  creditLimit?: number;
+  status: CustomerAccountStatus;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+  sync_status: string;
   [key: string]: unknown;
 }
 
@@ -50,6 +197,19 @@ export interface CustomersSchema {
   id: string;
   email?: string;
   phone?: string;
+  updatedAt: number;
+  [key: string]: unknown;
+}
+
+export interface NotificationPreferenceSchema {
+  id: string;
+  userId?: string;
+  customerId?: string;
+  category: string;
+  inApp: boolean;
+  email: boolean;
+  whatsapp: boolean;
+  createdAt: number;
   updatedAt: number;
   [key: string]: unknown;
 }
@@ -275,7 +435,7 @@ export interface ProductSchema {
   trackExpiry: boolean;
   expiryDate?: string;      // ISO date string (YYYY-MM-DD) if trackExpiry is true
   lowStockThreshold: number;
-  costPrice: number;
+  costPrice: number | null;
   retailPrice: number;
   wholesalePrice: number;
   supplyPrice: number;
@@ -380,7 +540,7 @@ export interface InventoryTransactionSchema {
   branchId: string;
   quantity: number;            // signed (+/-) in base units
   baseUnit: string;            // snapshot of product.baseUnit at time of transaction
-  unitCost: number;            // cost per base unit at time of transaction (FIFO snapshot)
+  unitCost: number | null;     // cost per base unit at time of transaction (FIFO snapshot)
   referenceNumber: string;     // auto-generated e.g. TXN-20240801-0001
   batchId?: string | null;     // linked batch if applicable
   sessionId?: string | null;   // linked stock count session if applicable
@@ -426,7 +586,7 @@ export interface InventoryBatchSchema {
   initialQuantity: number;     // original quantity when batch was created
   manufactureDate?: string;    // ISO date YYYY-MM-DD
   expiryDate?: string;         // ISO date YYYY-MM-DD
-  unitCost: number;            // cost per base unit for this batch (FIFO layer cost)
+  unitCost: number | null;     // cost per base unit for this batch (FIFO layer cost)
   supplierId?: string | null;  // future Purchasing link
   status: "active" | "depleted" | "expired" | "quarantined";
   notes?: string;
@@ -595,7 +755,7 @@ export interface InventoryTransferItemSchema {
   packagingUnit?: string;
   quantityInPackaging: number;
   convertedBaseQuantity: number;
-  unitCostSnapshot: number;
+  unitCostSnapshot: number | null;
   batchId?: string;
   manufactureDate?: string;
   expiryDate?: string;
@@ -651,9 +811,14 @@ export class JustSlyDatabase extends Dexie {
   products!: Table<ProductSchema, string>;
   inventory!: Table<InventorySchema, string>;
   sales!: Table<SalesSchema, string>;
+  sale_items!: Table<SaleItemSchema, string>;
+  sale_payments!: Table<SalePaymentSchema, string>;
+  sale_voids!: Table<SaleVoidSchema, string>;
   orders!: Table<OrdersSchema, string>;
   customers!: Table<CustomersSchema, string>;
+  customer_accounts!: Table<CustomerAccountSchema, string>;
   notifications!: Table<NotificationsSchema, string>;
+  notification_preferences!: Table<NotificationPreferenceSchema, string>;
   organizations!: Table<OrganizationSchema, string>;
   user_profiles!: Table<UserProfileSchema, string>;
   user_preferences!: Table<UserPreferencesSchema, string>;
@@ -684,6 +849,13 @@ export class JustSlyDatabase extends Dexie {
   inventory_transfer_batches!: Table<InventoryTransferBatchSchema, string>;
   inventory_reservations!: Table<InventoryReservationSchema, string>;
   transfer_status_history!: Table<TransferStatusHistorySchema, string>;
+  // Sprint 7 Wholesale
+  wholesale_orders!: Table<WholesaleOrderSchema, string>;
+  wholesale_order_items!: Table<WholesaleOrderItemSchema, string>;
+  order_status_history!: Table<OrderStatusHistorySchema, string>;
+  order_payments!: Table<OrderPaymentSchema, string>;
+  payment_receipts!: Table<PaymentReceiptSchema, string>;
+  invoices!: Table<InvoiceSchema, string>;
 
   constructor() {
     super("JustSlySuiteDB");
@@ -805,7 +977,7 @@ export class JustSlyDatabase extends Dexie {
       syncMetadata: "id, entityType, lastSyncedAt",
       products: "id, code, sku, barcode, name, categoryId, status, updatedAt",
       inventory: "id, productId, branchId, quantity, updatedAt",
-      sales: "id, branchId, status, createdAt",
+      sales: "id, branchId, saleNumber, status, createdAt",
       orders: "id, branchId, status, createdAt",
       customers: "id, email, phone, updatedAt",
       notifications: "id, read, createdAt",
@@ -837,6 +1009,53 @@ export class JustSlyDatabase extends Dexie {
       inventory_transfer_batches: "id, transferItemId, batchId, createdAt",
       inventory_reservations: "id, productId, branchId, transferId, createdAt, releasedAt",
       transfer_status_history: "id, transferId, timestamp",
+    });
+
+    this.version(7).stores({
+      syncQueue: "id, entityType, operationType, status, priority, timestamp, retryCount",
+      syncMetadata: "id, entityType, lastSyncedAt",
+      products: "id, code, sku, barcode, name, categoryId, status, updatedAt",
+      inventory: "id, productId, branchId, quantity, updatedAt",
+      sales: "id, branchId, saleNumber, status, paymentStatus, createdAt",
+      sale_items: "id, saleId, productId, createdAt",
+      sale_payments: "id, saleId, method, status, createdAt",
+      sale_voids: "id, saleId, voidedBy, createdAt",
+      orders: "id, branchId, status, createdAt",
+      customers: "id, email, phone, updatedAt",
+      notifications: "id, read, createdAt",
+      organizations: "id, name, updated_at",
+      user_profiles: "id, userId, displayName, email, updatedAt",
+      user_preferences: "id, userId, theme, updatedAt",
+      branches: "id, code, name, status, managerId, updatedAt",
+      staff: "id, authUserId, employeeCode, email, branchId, status, updatedAt",
+      roles: "id, code, name, status, isSystem",
+      permissions: "id, category, resource, action",
+      role_permissions: "id, roleId, permissionId",
+      user_roles: "id, userId, roleId, branchId",
+      audit_logs: "id, userId, branchId, entity, entityId, action, timestamp, synced",
+      units_of_measure: "id, name, abbreviation, status, isSystem",
+      categories: "id, code, name, status, parentId, updatedAt",
+      product_packaging: "id, productId, sortOrder, updatedAt",
+      price_history: "id, productId, priceType, changedBy, timestamp",
+      product_import_jobs: "id, status, createdAt",
+      inventory_transactions: "id, productId, branchId, type, referenceNumber, batchId, sessionId, performedBy, timestamp",
+      inventory_balances: "id, [productId+branchId], productId, branchId, updatedAt",
+      inventory_batches: "id, productId, branchId, batchNumber, expiryDate, status, updatedAt",
+      inventory_adjustments: "id, transactionId, productId, branchId, reason, timestamp",
+      inventory_alerts: "id, type, severity, productId, branchId, batchId, acknowledged, createdAt",
+      stock_count_sessions: "id, sessionNumber, branchId, status, startedAt",
+      stock_count_items: "id, sessionId, productId, batchId",
+      inventory_transfers: "id, transferNumber, transferType, sourceBranchId, destinationBranchId, status, createdBy, createdAt, updatedAt",
+      inventory_transfer_items: "id, transferId, productId, batchId, createdAt",
+      inventory_transfer_batches: "id, transferItemId, batchId, createdAt",
+      inventory_reservations: "id, productId, branchId, transferId, createdAt, releasedAt",
+      transfer_status_history: "id, transferId, timestamp",
+      wholesale_orders: "id, orderNumber, customerId, hqBranchId, status, paymentStatus, createdAt",
+      wholesale_order_items: "id, orderId, productId, createdAt",
+      order_status_history: "id, orderId, timestamp",
+      order_payments: "id, orderId, status, createdAt",
+      payment_receipts: "id, orderId, uploadedAt",
+      invoices: "id, orderId, invoiceNumber, issuedAt",
     });
   }
 }

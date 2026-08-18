@@ -100,7 +100,10 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
       return;
     }
 
-    const cost = parseFloat(unitCost) || selectedProduct.costPrice || 0;
+    const enteredCost = unitCost.trim() !== "" ? Number.parseFloat(unitCost) : NaN;
+    const cost = Number.isFinite(enteredCost)
+      ? enteredCost
+      : selectedProduct.costPrice ?? null;
 
     setLoading(true);
     try {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, FileText, Globe, Palette, Settings } from "lucide-react";
+import { Building2, FileText, Globe, Palette, Bell, Package, Mail } from "lucide-react";
 
 import type { OrganizationSchema } from "@/database/schema";
 import { organizationRepository } from "@/repositories/entity.repositories";
@@ -10,6 +10,9 @@ import { GeneralSettingsForm } from "./general-settings-form";
 import { CompanyProfileForm } from "./company-profile-form";
 import { BrandingSettingsForm } from "./branding-settings-form";
 import { ReceiptSettingsForm } from "./receipt-settings-form";
+import { NotificationSettingsForm } from "./notification-settings-form";
+import { InventorySettingsForm } from "./inventory-settings-form";
+import { EmailTemplatesPanel } from "./email-templates-panel";
 
 export function SettingsPage() {
   const [orgData, setOrgData] = useState<OrganizationSchema | null>(null);
@@ -40,12 +43,12 @@ export function SettingsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Organization Settings"
-        description="Configure suite identity, legal registration, corporate branding, and point-of-sale receipt formats."
+        title="Organization & System Settings"
+        description="Configure suite identity, corporate branding, receipt formats, notification channels, default reorder thresholds, and email dispatch templates."
       />
 
       <Tabs defaultValue="general" className="space-y-4">
-        <TabsList className="h-9 p-1 bg-muted">
+        <TabsList className="h-9 p-1 bg-muted flex flex-wrap max-w-full">
           <TabsTrigger value="general" className="text-xs gap-1.5 px-3">
             <Globe className="size-3.5" /> General
           </TabsTrigger>
@@ -57,6 +60,15 @@ export function SettingsPage() {
           </TabsTrigger>
           <TabsTrigger value="receipt" className="text-xs gap-1.5 px-3">
             <FileText className="size-3.5" /> Receipt Templates
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="text-xs gap-1.5 px-3">
+            <Bell className="size-3.5" /> Notification Channels
+          </TabsTrigger>
+          <TabsTrigger value="inventory" className="text-xs gap-1.5 px-3">
+            <Package className="size-3.5" /> Inventory Defaults
+          </TabsTrigger>
+          <TabsTrigger value="email" className="text-xs gap-1.5 px-3">
+            <Mail className="size-3.5" /> Email Templates
           </TabsTrigger>
         </TabsList>
 
@@ -74,6 +86,18 @@ export function SettingsPage() {
 
         <TabsContent value="receipt">
           <ReceiptSettingsForm initialData={orgData} onSaved={setOrgData} />
+        </TabsContent>
+
+        <TabsContent value="notifications">
+          <NotificationSettingsForm initialData={orgData} onSaved={setOrgData} />
+        </TabsContent>
+
+        <TabsContent value="inventory">
+          <InventorySettingsForm initialData={orgData} onSaved={setOrgData} />
+        </TabsContent>
+
+        <TabsContent value="email">
+          <EmailTemplatesPanel />
         </TabsContent>
       </Tabs>
     </div>

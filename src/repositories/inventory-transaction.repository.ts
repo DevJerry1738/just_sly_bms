@@ -6,6 +6,8 @@ import type {
 } from "@/database/schema";
 import { SyncQueueService } from "@/services/sync/sync-queue";
 import { DomainEvents } from "@/services/events/domain-events";
+import { notificationService } from "@/services/notifications/notification.service";
+import { lowStockEvent } from "@/services/notifications/notification-events";
 
 // ---------------------------------------------------------------------------
 // Reference number generator: TXN-YYYYMMDD-XXXX
@@ -132,6 +134,32 @@ export class InventoryTransactionRepository {
         updatedBalance as unknown as Record<string, unknown>,
         { branchId: input.branchId }
       );
+
+      // Low Stock Notification Check (only on stock deduction)
+      if (input.quantity < 0) {
+        try {
+          const product = await db.products.get(input.productId);
+          const branch = await db.branches.get(input.branchId);
+          const threshold = product?.lowStockThreshold ?? 5;
+          const currentQty = updatedBalance.quantityOnHand;
+          const previousQty = currentQty - input.quantity; // since quantity < 0
+
+          if (currentQty <= threshold && previousQty > threshold) {
+            await notificationService.notify(
+              lowStockEvent({
+                productId: input.productId,
+                productName: product?.name || "Product",
+                branchId: input.branchId,
+                branchName: branch?.name || "Branch",
+                quantityRemaining: currentQty,
+                threshold,
+              })
+            );
+          }
+        } catch (err) {
+          console.warn("[InventoryTransactionRepository] Low stock notification check error:", err);
+        }
+      }
     }
 
     // Publish domain event for audit logging

@@ -55,7 +55,7 @@ export interface CreateProductInput {
   baseUnit: string;
   trackExpiry?: boolean;
   lowStockThreshold?: number;
-  costPrice: number;
+  costPrice: number | null;
   retailPrice: number;
   wholesalePrice: number;
   supplyPrice: number;
@@ -130,7 +130,8 @@ export class ProductRepository extends BaseRepository<ProductSchema> {
   }
 
   private filterSeedProducts(products: ProductSchema[]): ProductSchema[] {
-    return products.filter((product) => !this.isSeedProduct(product));
+    const custom = products.filter((product) => !this.isSeedProduct(product));
+    return custom.length > 0 ? custom : products;
   }
 
   async getAll(): Promise<ProductSchema[]> {
@@ -186,7 +187,6 @@ export class ProductRepository extends BaseRepository<ProductSchema> {
       description: data.description,
       categoryId: data.categoryId ?? null,
       brand: data.brand,
-      manufacturer: data.manufacturer,
       baseUnit: data.baseUnit,
       trackExpiry: data.trackExpiry ?? false,
       lowStockThreshold: data.lowStockThreshold ?? 0,
@@ -204,7 +204,7 @@ export class ProductRepository extends BaseRepository<ProductSchema> {
 
     // Record initial price history for all four price types
     const priceTypes: Array<{ type: "cost" | "retail" | "wholesale" | "supply"; value: number }> = [
-      { type: "cost", value: data.costPrice },
+      { type: "cost", value: data.costPrice ?? 0 },
       { type: "retail", value: data.retailPrice },
       { type: "wholesale", value: data.wholesalePrice },
       { type: "supply", value: data.supplyPrice },
@@ -256,7 +256,6 @@ export class ProductRepository extends BaseRepository<ProductSchema> {
       ...(updates.description !== undefined && { description: updates.description }),
       ...(updates.categoryId !== undefined && { categoryId: updates.categoryId }),
       ...(updates.brand !== undefined && { brand: updates.brand }),
-      ...(updates.manufacturer !== undefined && { manufacturer: updates.manufacturer }),
       ...(updates.baseUnit !== undefined && { baseUnit: updates.baseUnit }),
       ...(updates.trackExpiry !== undefined && { trackExpiry: updates.trackExpiry }),
       ...(updates.lowStockThreshold !== undefined && { lowStockThreshold: updates.lowStockThreshold }),
@@ -278,8 +277,8 @@ export class ProductRepository extends BaseRepository<ProductSchema> {
       { type: "supply", key: "supplyPrice" },
     ];
     for (const pf of priceFields) {
-      const prev = before[pf.key] as number;
-      const next = updated[pf.key] as number;
+      const prev = Number(before[pf.key] ?? 0);
+      const next = Number(updated[pf.key] ?? 0);
       if (prev !== next) {
         await priceHistoryRepository.addPriceRecord({
           productId: id,
