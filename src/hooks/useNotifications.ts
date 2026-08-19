@@ -43,13 +43,14 @@ export function useNotifications() {
   }, [refresh]);
 
   const markAsRead = async (id: string) => {
-    await notificationRepository.markAsRead(id);
+    if (!userId) return;
+    await notificationRepository.markAsRead(id, userId, branchId);
     await refresh();
   };
 
   const markAllAsRead = async () => {
     if (!userId) return;
-    await notificationRepository.markAllAsRead(userId);
+    await notificationRepository.markAllAsRead(userId, undefined, branchId);
     await refresh();
   };
 

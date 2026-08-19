@@ -18,7 +18,7 @@ export class NotificationRepository extends BaseRepository<NotificationsSchema> 
       // Branch-scoped notifications (inventory, expiry): only show if branchId matches active branch
       // Notifications with no branchId (wholesale orders, customer-targeted) are always visible
       const nBranchId = n.branchId as string | undefined;
-      if (nBranchId && activeBranchId && nBranchId !== activeBranchId) return false;
+      if (nBranchId && nBranchId !== activeBranchId) return false;
 
       return true;
     });
@@ -43,7 +43,7 @@ export class NotificationRepository extends BaseRepository<NotificationsSchema> 
         const isForUser = !n.recipientUserId || n.recipientUserId === userId || n.recipientCustomerId === userId;
         if (!isForUser) return false;
         const nBranchId = n.branchId as string | undefined;
-        if (nBranchId && activeBranchId && nBranchId !== activeBranchId) return false;
+        if (nBranchId && nBranchId !== activeBranchId) return false;
         return true;
       }).length;
     }
@@ -56,8 +56,17 @@ export class NotificationRepository extends BaseRepository<NotificationsSchema> 
   }
 
   /** Mark single notification as read */
-  async markAsRead(id: string): Promise<void> {
+  async markAsRead(id: string, userId: string, activeBranchId?: string): Promise<void> {
     const existing = await this.getById(id);
+    if (!existing || existing.read) return;
+
+    const isForUser =
+      !existing.recipientUserId ||
+      existing.recipientUserId === userId ||
+      existing.recipientCustomerId === userId;
+    const notificationBranchId = existing.branchId as string | undefined;
+    if (!isForUser || (notificationBranchId && notificationBranchId !== activeBranchId)) return;
+
     if (existing && !existing.read) {
       await this.update(id, {
         read: true,
@@ -67,16 +76,20 @@ export class NotificationRepository extends BaseRepository<NotificationsSchema> 
   }
 
   /** Mark all unread notifications as read for user or customer */
-  async markAllAsRead(userId?: string, customerId?: string): Promise<number> {
+  async markAllAsRead(userId?: string, customerId?: string, activeBranchId?: string): Promise<number> {
     const all = await db.notifications.toArray();
     const unread = all.filter((n) => {
       if (n.read) return false;
       if (userId) {
-        return !n.recipientUserId || n.recipientUserId === userId || n.recipientCustomerId === userId;
+        const isForUser =
+          !n.recipientUserId || n.recipientUserId === userId || n.recipientCustomerId === userId;
+        if (!isForUser) return false;
       }
       if (customerId) {
-        return !n.recipientCustomerId || n.recipientCustomerId === customerId;
+        if (n.recipientCustomerId && n.recipientCustomerId !== customerId) return false;
       }
+      const notificationBranchId = n.branchId as string | undefined;
+      if (notificationBranchId && notificationBranchId !== activeBranchId) return false;
       return true;
     });
 

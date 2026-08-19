@@ -108,9 +108,10 @@ export function CustomersPage() {
   const loadCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await customerRepository.getAll();
-      setCustomers(all.sort((a, b) => b.createdAt - a.createdAt));
-    } catch {
+      const all = (await customerRepository.getAll().catch(() => [])) || [];
+      setCustomers((all || []).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+    } catch (err) {
+      console.error("[CustomersPage] Failed to load customers:", err);
       toast.error("Failed to load customers");
     } finally {
       setLoading(false);

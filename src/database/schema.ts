@@ -630,7 +630,7 @@ export type AlertType =
 
 /**
  * In-app alert record linked to the notifications table.
- * One alert per (product, branch, type) — deduplicated on generation.
+ * Expiry alerts are unique per (branch, batch, threshold type).
  */
 export interface InventoryAlertSchema {
   id: string;
@@ -1056,6 +1056,7 @@ export class JustSlyDatabase extends Dexie {
       order_payments: "id, orderId, status, createdAt",
       payment_receipts: "id, orderId, uploadedAt",
       invoices: "id, orderId, invoiceNumber, issuedAt",
+      customer_accounts: "id, authUserId, customerCode, email, status, createdAt",
     });
   }
 }

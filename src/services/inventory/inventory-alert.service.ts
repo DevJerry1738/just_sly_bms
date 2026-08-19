@@ -1,5 +1,6 @@
 import { inventoryAlertRepository } from "@/repositories/inventory-alert.repository";
 import { notificationsRepository } from "@/repositories/entity.repositories";
+import { db } from "@/database/schema";
 import type { InventoryAlertSchema } from "@/database/schema";
 
 export class InventoryAlertService {
@@ -8,15 +9,9 @@ export class InventoryAlertService {
    * Creates inventory alert records and mirrors them into the notifications table for in-app display.
    */
   async runAlertScan(): Promise<{ expiryAlerts: number; lowStockAlerts: number }> {
-    const expiryAlerts = await inventoryAlertRepository.generateExpiryAlerts();
+    const expiryAlerts = await this.runExpiryScan();
     const lowStockAlerts = await inventoryAlertRepository.generateLowStockAlerts();
-
-    const allNewAlerts = [...expiryAlerts, ...lowStockAlerts];
-
-    // Push into in-app notifications
-    for (const alert of allNewAlerts) {
-      await this._mirrorToNotification(alert);
-    }
+    await this.mirrorAlerts([...expiryAlerts, ...lowStockAlerts]);
 
     return {
       expiryAlerts: expiryAlerts.length,
@@ -24,7 +19,24 @@ export class InventoryAlertService {
     };
   }
 
+  async runExpiryScan(): Promise<InventoryAlertSchema[]> {
+    const expiryAlerts = await inventoryAlertRepository.generateExpiryAlerts();
+    await this.mirrorAlerts(expiryAlerts);
+    return expiryAlerts;
+  }
+
+  private async mirrorAlerts(alerts: InventoryAlertSchema[]): Promise<void> {
+    for (const alert of alerts) {
+      await this._mirrorToNotification(alert);
+    }
+  }
+
   private async _mirrorToNotification(alert: InventoryAlertSchema): Promise<void> {
+    const notificationId = `inventory-alert:${alert.id}`;
+    const existing = await db.notifications.get(notificationId);
+
+    if (existing) return;
+
     const title =
       alert.severity === "expired"
         ? "Expired Stock Alert"
@@ -33,7 +45,7 @@ export class InventoryAlertService {
         : "Inventory Warning";
 
     await notificationsRepository.create({
-      id: crypto.randomUUID(),
+      id: notificationId,
       title,
       message: alert.message,
       type: alert.severity === "expired" || alert.severity === "critical" ? "error" : "warning",
@@ -46,7 +58,7 @@ export class InventoryAlertService {
         alertType: alert.type,
       },
       createdAt: Date.now(),
-    });
+    }, alert.branchId);
   }
 }
 

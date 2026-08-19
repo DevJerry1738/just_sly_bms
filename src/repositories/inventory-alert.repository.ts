@@ -72,7 +72,7 @@ export class InventoryAlertRepository extends BaseRepository<InventoryAlertSchem
 
       const product = await db.products.get(batch.productId);
       const alert: InventoryAlertSchema = {
-        id: crypto.randomUUID(),
+        id: `expiry:${batch.branchId}:${batch.id}:${type}`,
         type,
         severity: severityForAlertType(type),
         productId: batch.productId,
