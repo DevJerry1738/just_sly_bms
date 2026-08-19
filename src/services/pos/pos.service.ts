@@ -68,6 +68,8 @@ export class PosService {
       baseQuantity: number;
       costPrice: number;
     }> = [];
+    const saleItems: SaleItemSchema[] = [];
+    let salePayment: SalePaymentSchema;
 
     await db.transaction("rw", [db.sales, db.sale_items, db.sale_payments, db.inventory_transactions, db.inventory_balances, db.syncQueue], async () => {
       await db.sales.put(sale);
@@ -89,6 +91,7 @@ export class PosService {
           sync_status: "pending",
         };
         await db.sale_items.put(saleItem);
+        saleItems.push(saleItem);
 
         const balance = await inventoryBalanceRepository.getBalance(item.productId, input.branchId);
         if (!balance || balance.quantityOnHand < baseQuantity) {
@@ -114,6 +117,7 @@ export class PosService {
         sync_status: "pending",
       };
       await db.sale_payments.put(payment);
+      salePayment = payment;
     });
 
     // Record inventory transactions AFTER the outer Dexie transaction has
@@ -136,8 +140,20 @@ export class PosService {
     }
 
     await SyncQueueService.enqueue("sales", "CREATE", sale as unknown as Record<string, unknown>, { branchId: input.branchId });
-    await SyncQueueService.enqueue("sale_items", "CREATE", { saleId, items: input.items }, { branchId: input.branchId });
-    await SyncQueueService.enqueue("sale_payments", "CREATE", { saleId, paymentMethod: input.paymentMethod }, { branchId: input.branchId });
+    for (const saleItem of saleItems) {
+      await SyncQueueService.enqueue(
+        "sale_items",
+        "CREATE",
+        saleItem as unknown as Record<string, unknown>,
+        { branchId: input.branchId, dependency: saleId },
+      );
+    }
+    await SyncQueueService.enqueue(
+      "sale_payments",
+      "CREATE",
+      salePayment! as unknown as Record<string, unknown>,
+      { branchId: input.branchId, dependency: saleId },
+    );
 
     await DomainEvents.publish("SALE_COMPLETED", {
       entity: "Sale",

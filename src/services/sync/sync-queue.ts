@@ -86,4 +86,16 @@ export class SyncQueueService {
   static async purgeCompleted(): Promise<void> {
     await db.syncQueue.where("status").equals("completed").delete();
   }
+
+  /** Requeue failed records after a sync handler or migration has been fixed. */
+  static async requeueFailed(): Promise<number> {
+    const failed = await db.syncQueue.where("status").equals("failed").toArray();
+    for (const item of failed) {
+      await db.syncQueue.update(item.id, {
+        status: "pending",
+        errorMessage: undefined,
+      });
+    }
+    return failed.length;
+  }
 }

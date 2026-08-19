@@ -152,6 +152,42 @@ export class SyncScheduler {
           await SyncQueueService.enqueue("product_packaging", "UPSERT", pkg as unknown as Record<string, unknown>);
         }
       }
+
+      // 4. Catch up normalized customer, POS, and wholesale records.
+      // These tables were previously written only to IndexedDB or queued under
+      // entity names with no registered handler.
+      const enqueueUnsent = async (
+        entityType: string,
+        table: { toArray: () => Promise<Array<Record<string, unknown>>> },
+        remoteTable: string,
+      ) => {
+        const { data, error } = await client.from(remoteTable).select("id");
+        if (error) return;
+        const remoteIds = new Set((data || []).map((row: { id: string }) => row.id));
+        for (const record of await table.toArray()) {
+          const id = record["id"] as string;
+          if (queuedIds.has(id)) continue;
+          if (record["sync_status"] === "pending" || !remoteIds.has(id)) {
+            const dependency = (record["saleId"] || record["orderId"]) as string | undefined;
+            await SyncQueueService.enqueue(entityType, "UPSERT", record, {
+              dependency,
+              branchId: (record["branchId"] || record["hqBranchId"]) as string | undefined,
+            });
+          }
+        }
+      };
+
+      await enqueueUnsent("customer_accounts", db.customer_accounts, "customer_accounts");
+      await enqueueUnsent("sales", db.sales, "sales_normalized");
+      await enqueueUnsent("sale_items", db.sale_items, "sale_items");
+      await enqueueUnsent("sale_payments", db.sale_payments, "sale_payments");
+      await enqueueUnsent("sale_voids", db.sale_voids, "sale_voids");
+      await enqueueUnsent("wholesale_orders", db.wholesale_orders, "wholesale_orders");
+      await enqueueUnsent("wholesale_order_items", db.wholesale_order_items, "wholesale_order_items");
+      await enqueueUnsent("order_status_history", db.order_status_history, "order_status_history");
+      await enqueueUnsent("order_payments", db.order_payments, "order_payments");
+      await enqueueUnsent("payment_receipts", db.payment_receipts, "payment_receipts");
+      await enqueueUnsent("invoices", db.invoices, "invoices");
     } catch (err) {
       console.warn("[SyncScheduler] Error during local data catch-up:", err);
     }
@@ -323,6 +359,247 @@ export class SyncScheduler {
         }
       }
 
+      // 5. Pull normalized customer, POS, and wholesale records.
+      const putRemote = async (
+        table: { get: (id: string) => Promise<Record<string, unknown> | undefined>; put: (record: Record<string, unknown>) => Promise<unknown> },
+        record: Record<string, unknown>,
+      ) => {
+        const existing = await table.get(record.id as string);
+        if (existing?.sync_status === "pending" || existing?.sync_status === "error") return;
+        await table.put({ ...record, sync_status: "synced" });
+      };
+      const milliseconds = (value: unknown) => value ? new Date(String(value)).getTime() : Date.now();
+
+      const { data: remoteCustomers, error: customerErr } = await client
+        .from("customer_accounts")
+        .select("*");
+      if (!customerErr && remoteCustomers) {
+        for (const row of remoteCustomers) {
+          await putRemote(db.customer_accounts, {
+            id: row.id,
+            authUserId: row.auth_user_id || undefined,
+            customerCode: row.customer_code,
+            businessName: row.business_name || undefined,
+            contactName: row.contact_name,
+            email: row.email,
+            phone: row.phone || undefined,
+            address: row.address || undefined,
+            city: row.city || undefined,
+            state: row.state || undefined,
+            country: row.country || undefined,
+            creditLimit: row.credit_limit == null ? undefined : Number(row.credit_limit),
+            status: row.status || "active",
+            notes: row.notes || undefined,
+            createdAt: milliseconds(row.created_at),
+            updatedAt: milliseconds(row.updated_at),
+          });
+        }
+      }
+
+      const { data: remoteSales, error: salesErr } = await client
+        .from("sales_normalized")
+        .select("*");
+      if (!salesErr && remoteSales) {
+        for (const row of remoteSales) {
+          await putRemote(db.sales, {
+            id: row.id,
+            branchId: row.branch_id,
+            saleNumber: row.sale_number,
+            status: row.status,
+            paymentStatus: row.payment_status,
+            subtotal: Number(row.subtotal ?? 0),
+            discountAmount: Number(row.discount_amount ?? 0),
+            totalAmount: Number(row.total_amount ?? 0),
+            amountTendered: Number(row.amount_tendered ?? 0),
+            currency: row.currency || "NGN",
+            paymentMethod: row.payment_method,
+            createdBy: row.created_by,
+            createdByName: row.created_by_name || undefined,
+            completedAt: row.completed_at ? milliseconds(row.completed_at) : undefined,
+            voidedAt: row.voided_at ? milliseconds(row.voided_at) : undefined,
+            notes: row.notes || undefined,
+            createdAt: milliseconds(row.created_at),
+            updatedAt: milliseconds(row.updated_at),
+          });
+        }
+      }
+
+      const { data: remoteSaleItems, error: saleItemsErr } = await client
+        .from("sale_items")
+        .select("*");
+      if (!saleItemsErr && remoteSaleItems) {
+        for (const row of remoteSaleItems) {
+          await putRemote(db.sale_items, {
+            id: row.id,
+            saleId: row.sale_id,
+            productId: row.product_id,
+            productName: row.product_name,
+            packagingLabel: row.packaging_label || undefined,
+            quantity: Number(row.quantity ?? 0),
+            baseQuantity: Number(row.base_quantity ?? 0),
+            unitPrice: Number(row.unit_price ?? 0),
+            costPrice: Number(row.cost_price ?? 0),
+            subtotal: Number(row.subtotal ?? 0),
+            createdAt: milliseconds(row.created_at),
+          });
+        }
+      }
+
+      const { data: remoteSalePayments, error: salePaymentsErr } = await client
+        .from("sale_payments")
+        .select("*");
+      if (!salePaymentsErr && remoteSalePayments) {
+        for (const row of remoteSalePayments) {
+          await putRemote(db.sale_payments, {
+            id: row.id,
+            saleId: row.sale_id,
+            method: row.method,
+            status: row.status,
+            amount: Number(row.amount ?? 0),
+            reference: row.reference || undefined,
+            createdAt: milliseconds(row.created_at),
+          });
+        }
+      }
+
+      const { data: remoteSaleVoids, error: saleVoidsErr } = await client
+        .from("sale_voids")
+        .select("*");
+      if (!saleVoidsErr && remoteSaleVoids) {
+        for (const row of remoteSaleVoids) {
+          await putRemote(db.sale_voids, {
+            id: row.id,
+            saleId: row.sale_id,
+            reason: row.reason,
+            voidedBy: row.voided_by,
+            createdAt: milliseconds(row.created_at),
+            inventoryReversed: row.inventory_reversed ?? false,
+          });
+        }
+      }
+
+      const { data: remoteOrders, error: wholesaleErr } = await client
+        .from("wholesale_orders")
+        .select("*");
+      if (!wholesaleErr && remoteOrders) {
+        for (const row of remoteOrders) {
+          await putRemote(db.wholesale_orders, {
+            id: row.id,
+            orderNumber: row.order_number,
+            customerId: row.customer_id,
+            hqBranchId: row.hq_branch_id,
+            status: row.status,
+            paymentStatus: row.payment_status,
+            subtotal: Number(row.subtotal ?? 0),
+            discountAmount: Number(row.discount_amount ?? 0),
+            totalAmount: Number(row.total_amount ?? 0),
+            currency: row.currency || "NGN",
+            notes: row.notes || undefined,
+            createdAt: milliseconds(row.created_at),
+            updatedAt: milliseconds(row.updated_at),
+          });
+        }
+      }
+
+      const { data: remoteOrderItems, error: orderItemsErr } = await client
+        .from("wholesale_order_items")
+        .select("*");
+      if (!orderItemsErr && remoteOrderItems) {
+        for (const row of remoteOrderItems) {
+          await putRemote(db.wholesale_order_items, {
+            id: row.id,
+            orderId: row.order_id,
+            productId: row.product_id,
+            productName: row.product_name,
+            productCode: row.sku,
+            sku: row.sku,
+            sellingUnit: row.selling_unit,
+            unitsPerPackage: Number(row.units_per_package ?? 1),
+            quantity: Number(row.quantity ?? 0),
+            baseQuantity: Number(row.base_quantity ?? 0),
+            unitPriceSnapshot: Number(row.unit_price_snapshot ?? 0),
+            costPriceSnapshot: Number(row.cost_price_snapshot ?? 0),
+            subtotal: Number(row.subtotal ?? 0),
+            createdAt: milliseconds(row.created_at),
+          });
+        }
+      }
+
+      const { data: remoteHistory, error: historyErr } = await client
+        .from("order_status_history")
+        .select("*");
+      if (!historyErr && remoteHistory) {
+        for (const row of remoteHistory) {
+          await putRemote(db.order_status_history, {
+            id: row.id,
+            orderId: row.order_id,
+            fromStatus: row.from_status || undefined,
+            toStatus: row.to_status,
+            changedBy: row.changed_by,
+            reason: row.reason || undefined,
+            timestamp: milliseconds(row.timestamp),
+          });
+        }
+      }
+
+      const { data: remoteOrderPayments, error: orderPaymentsErr } = await client
+        .from("order_payments")
+        .select("*");
+      if (!orderPaymentsErr && remoteOrderPayments) {
+        for (const row of remoteOrderPayments) {
+          await putRemote(db.order_payments, {
+            id: row.id,
+            orderId: row.order_id,
+            paymentMethod: row.payment_method || "bank_transfer",
+            amount: Number(row.amount ?? 0),
+            status: row.status,
+            reference: row.reference || undefined,
+            createdAt: milliseconds(row.created_at),
+          });
+        }
+      }
+
+      const { data: remoteReceipts, error: receiptsErr } = await client
+        .from("payment_receipts")
+        .select("*");
+      if (!receiptsErr && remoteReceipts) {
+        for (const row of remoteReceipts) {
+          await putRemote(db.payment_receipts, {
+            id: row.id,
+            orderId: row.order_id,
+            paymentId: row.payment_id,
+            filePath: row.storage_path,
+            fileName: row.file_name,
+            mimeType: row.mime_type || "application/octet-stream",
+            fileSize: Number(row.file_size ?? 0),
+            uploadedBy: row.uploaded_by,
+            uploadedAt: milliseconds(row.uploaded_at),
+            bankName: row.bank_name || undefined,
+            transferReference: row.transfer_reference || undefined,
+            publicUrl: row.public_url || undefined,
+          });
+        }
+      }
+
+      const { data: remoteInvoices, error: invoicesErr } = await client
+        .from("invoices")
+        .select("*");
+      if (!invoicesErr && remoteInvoices) {
+        for (const row of remoteInvoices) {
+          await putRemote(db.invoices, {
+            id: row.id,
+            orderId: row.order_id,
+            invoiceNumber: row.invoice_number,
+            customerId: row.customer_id,
+            amountDue: Number(row.amount ?? row.amount_due ?? 0),
+            dueDate: row.due_date ? milliseconds(row.due_date) : undefined,
+            status: row.status || "unpaid",
+            createdAt: milliseconds(row.created_at || row.issued_at),
+            updatedAt: milliseconds(row.updated_at || row.issued_at),
+          });
+        }
+      }
+
       // 6. Pull price history (append-only — only pull records we don't have)
       const localPriceHistoryIds = new Set(
         (await db.price_history.toArray()).map((h) => h.id)
@@ -432,5 +709,21 @@ export class SyncScheduler {
     await this.catchUpExistingLocalData();
     await SyncManager.processQueue();
     await this.pullSync();
+  }
+
+  /**
+   * One-time recovery for records created before all sync handlers existed.
+   * Call this from an authenticated admin recovery action after deploying the
+   * matching Supabase migration.
+   */
+  static async recoverLocalData(): Promise<{
+    requeuedFailed: number;
+    syncResult: Awaited<ReturnType<typeof SyncManager.processQueue>>;
+  }> {
+    const requeuedFailed = await SyncQueueService.requeueFailed();
+    await this.catchUpExistingLocalData();
+    const syncResult = await SyncManager.processQueue();
+    await this.pullSync();
+    return { requeuedFailed, syncResult };
   }
 }

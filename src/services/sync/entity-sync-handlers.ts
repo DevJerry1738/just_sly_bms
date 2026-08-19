@@ -125,6 +125,255 @@ SyncManager.registerHandler("products", async (operationType, payload) => {
   return { success: !error, error: error?.message };
 });
 
+// Offline-first customer accounts and normalized POS/wholesale records.
+async function markLocalSynced(table: { update: (id: string, changes: Record<string, unknown>) => Promise<unknown> }, id: string) {
+  await table.update(id, { sync_status: "synced" });
+}
+
+SyncManager.registerHandler("customer_accounts", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("customer_accounts").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+
+  const { error } = await client.from("customer_accounts").upsert({
+    id,
+    auth_user_id: toCleanUuidOrNull(payload["authUserId"]),
+    customer_code: payload["customerCode"],
+    business_name: toCleanStringOrNull(payload["businessName"]),
+    contact_name: payload["contactName"],
+    email: payload["email"],
+    phone: toCleanStringOrNull(payload["phone"]),
+    address: toCleanStringOrNull(payload["address"]),
+    city: toCleanStringOrNull(payload["city"]),
+    state: toCleanStringOrNull(payload["state"]),
+    country: toCleanStringOrNull(payload["country"]),
+    credit_limit: payload["creditLimit"] ?? null,
+    status: payload["status"] || "active",
+    notes: toCleanStringOrNull(payload["notes"]),
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+    updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.customer_accounts, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("sales", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("sales_normalized").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+
+  const timestamp = (value: unknown) => value ? new Date(Number(value)).toISOString() : null;
+  const { error } = await client.from("sales_normalized").upsert({
+    id,
+    branch_id: payload["branchId"],
+    sale_number: payload["saleNumber"],
+    status: payload["status"],
+    payment_status: payload["paymentStatus"],
+    subtotal: payload["subtotal"] ?? 0,
+    discount_amount: payload["discountAmount"] ?? 0,
+    total_amount: payload["totalAmount"] ?? 0,
+    amount_tendered: payload["amountTendered"] ?? 0,
+    currency: payload["currency"] || "NGN",
+    payment_method: payload["paymentMethod"],
+    created_by: payload["createdBy"],
+    created_by_name: toCleanStringOrNull(payload["createdByName"]),
+    completed_at: timestamp(payload["completedAt"]),
+    voided_at: timestamp(payload["voidedAt"]),
+    notes: toCleanStringOrNull(payload["notes"]),
+    created_at: timestamp(payload["createdAt"]) || new Date().toISOString(),
+    updated_at: timestamp(payload["updatedAt"]) || new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.sales, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("sale_items", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("sale_items").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("sale_items").upsert({
+    id,
+    sale_id: payload["saleId"],
+    product_id: payload["productId"],
+    product_name: payload["productName"],
+    packaging_label: toCleanStringOrNull(payload["packagingLabel"]),
+    quantity: payload["quantity"] ?? 0,
+    base_quantity: payload["baseQuantity"] ?? 0,
+    unit_price: payload["unitPrice"] ?? 0,
+    cost_price: payload["costPrice"] ?? 0,
+    subtotal: payload["subtotal"] ?? 0,
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.sale_items, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("sale_payments", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("sale_payments").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("sale_payments").upsert({
+    id,
+    sale_id: payload["saleId"],
+    method: payload["method"],
+    status: payload["status"],
+    amount: payload["amount"] ?? 0,
+    reference: toCleanStringOrNull(payload["reference"]),
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.sale_payments, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("sale_voids", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("sale_voids").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("sale_voids").upsert({
+    id,
+    sale_id: payload["saleId"],
+    reason: payload["reason"],
+    voided_by: payload["voidedBy"],
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+    inventory_reversed: payload["inventoryReversed"] ?? false,
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.sale_voids, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("wholesale_orders", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("wholesale_orders").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const timestamp = (value: unknown) => value ? new Date(Number(value)).toISOString() : null;
+  const { error } = await client.from("wholesale_orders").upsert({
+    id,
+    order_number: payload["orderNumber"],
+    customer_id: payload["customerId"],
+    hq_branch_id: payload["hqBranchId"],
+    status: payload["status"],
+    payment_status: payload["paymentStatus"],
+    subtotal: payload["subtotal"] ?? 0,
+    discount_amount: payload["discountAmount"] ?? 0,
+    total_amount: payload["totalAmount"] ?? 0,
+    currency: payload["currency"] || "NGN",
+    notes: toCleanStringOrNull(payload["notes"]),
+    created_at: timestamp(payload["createdAt"]) || new Date().toISOString(),
+    updated_at: timestamp(payload["updatedAt"]) || new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.wholesale_orders, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("wholesale_order_items", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("wholesale_order_items").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("wholesale_order_items").upsert({
+    id,
+    order_id: payload["orderId"],
+    product_id: payload["productId"],
+    product_name: payload["productName"],
+    sku: payload["sku"] || payload["productCode"],
+    selling_unit: payload["sellingUnit"],
+    units_per_package: payload["unitsPerPackage"] ?? 1,
+    quantity: payload["quantity"] ?? 0,
+    base_quantity: payload["baseQuantity"] ?? 0,
+    unit_price_snapshot: payload["unitPriceSnapshot"] ?? 0,
+    cost_price_snapshot: payload["costPriceSnapshot"] ?? 0,
+    subtotal: payload["subtotal"] ?? 0,
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.wholesale_order_items, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("order_status_history", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("order_status_history").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("order_status_history").upsert({
+    id,
+    order_id: payload["orderId"],
+    from_status: toCleanStringOrNull(payload["fromStatus"]),
+    to_status: payload["toStatus"],
+    changed_by: payload["changedBy"],
+    reason: toCleanStringOrNull(payload["reason"]),
+    timestamp: new Date(Number(payload["timestamp"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.order_status_history, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("order_payments", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("order_payments").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("order_payments").upsert({
+    id,
+    order_id: payload["orderId"],
+    amount: payload["amount"] ?? 0,
+    status: payload["status"],
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.order_payments, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("payment_receipts", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("payment_receipts").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("payment_receipts").upsert({
+    id,
+    order_id: payload["orderId"],
+    file_name: payload["fileName"],
+    bank_name: toCleanStringOrNull(payload["bankName"]),
+    transfer_reference: toCleanStringOrNull(payload["transferReference"]),
+    storage_path: payload["filePath"] || payload["storagePath"],
+    uploaded_at: new Date(Number(payload["uploadedAt"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.payment_receipts, id);
+  return { success: !error, error: error?.message };
+});
+
+SyncManager.registerHandler("invoices", async (operationType, payload) => {
+  const id = payload["id"] as string;
+  if (operationType === "DELETE") {
+    const { error } = await client.from("invoices").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+  const { error } = await client.from("invoices").upsert({
+    id,
+    order_id: payload["orderId"],
+    invoice_number: payload["invoiceNumber"],
+    amount: payload["amount"] ?? payload["amountDue"] ?? 0,
+    issued_at: new Date(Number(payload["issuedAt"] || payload["createdAt"] || Date.now())).toISOString(),
+  }, { onConflict: "id" });
+  if (!error) await markLocalSynced(db.invoices, id);
+  return { success: !error, error: error?.message };
+});
+
 // Product Packaging Handler
 SyncManager.registerHandler("product_packaging", async (operationType, payload) => {
   if (operationType === "DELETE") {

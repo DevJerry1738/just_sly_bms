@@ -191,6 +191,12 @@ export class WholesaleOrderService {
         sync_status: "pending",
       };
       await db.wholesale_order_items.put(lineItem);
+      await SyncQueueService.enqueue(
+        "wholesale_order_items",
+        "CREATE",
+        lineItem as unknown as Record<string, unknown>,
+        { branchId: hqBranchId, dependency: orderId },
+      );
     }
 
     await this._appendStatusHistory(orderId, "pending_payment", input.customerId, "Order created");
@@ -279,8 +285,18 @@ export class WholesaleOrderService {
     // Update order status → payment_submitted
     await this.updateOrderStatus(orderId, "payment_submitted", "system", "Payment receipt uploaded");
 
-    await SyncQueueService.enqueue("order_payments", "CREATE", payment as unknown as Record<string, unknown>, {});
-    await SyncQueueService.enqueue("payment_receipts", "CREATE", receipt as unknown as Record<string, unknown>, {});
+    await SyncQueueService.enqueue(
+      "order_payments",
+      "CREATE",
+      payment as unknown as Record<string, unknown>,
+      { dependency: orderId },
+    );
+    await SyncQueueService.enqueue(
+      "payment_receipts",
+      "CREATE",
+      receipt as unknown as Record<string, unknown>,
+      { dependency: orderId },
+    );
 
     // Trigger notification
     const customer = await customerRepository.getById(customerId);
@@ -492,7 +508,12 @@ export class WholesaleOrderService {
     };
 
     await db.invoices.put(invoice);
-    await SyncQueueService.enqueue("invoices", "CREATE", invoice as unknown as Record<string, unknown>, {});
+    await SyncQueueService.enqueue(
+      "invoices",
+      "CREATE",
+      invoice as unknown as Record<string, unknown>,
+      { dependency: orderId },
+    );
 
     return invoice;
   }
@@ -567,6 +588,12 @@ export class WholesaleOrderService {
       timestamp: Date.now(),
     };
     await db.order_status_history.put(entry);
+    await SyncQueueService.enqueue(
+      "order_status_history",
+      "CREATE",
+      entry as unknown as Record<string, unknown>,
+      { dependency: orderId },
+    );
   }
 }
 

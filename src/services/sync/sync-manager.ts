@@ -51,8 +51,35 @@ export class SyncManager {
         const handler = this.handlers.get(item.entityType);
 
         if (!handler) {
-          // If no handler registered yet, skip for future module handling
+          const errorMessage = `No sync handler registered for entity "${item.entityType}"`;
+          await SyncQueueService.updateStatus(item.id, "failed", errorMessage);
+          failedCount++;
+          errors.push({ itemId: item.id, error: errorMessage });
           continue;
+        }
+
+        if (item.dependency) {
+          const dependencyPending = items.some(
+            (candidate) =>
+              candidate.id !== item.id &&
+              candidate.payload["id"] === item.dependency &&
+              ["pending", "syncing"].includes(candidate.status),
+          );
+          if (dependencyPending) continue;
+
+          const dependencyFailed = items.some(
+            (candidate) =>
+              candidate.id !== item.id &&
+              candidate.payload["id"] === item.dependency &&
+              candidate.status === "failed",
+          );
+          if (dependencyFailed) {
+            const errorMessage = `Dependency ${item.dependency} failed; child record was not uploaded`;
+            await SyncQueueService.updateStatus(item.id, "failed", errorMessage);
+            failedCount++;
+            errors.push({ itemId: item.id, error: errorMessage });
+            continue;
+          }
         }
 
         await SyncQueueService.updateStatus(item.id, "syncing");
