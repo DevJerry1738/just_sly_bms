@@ -5,6 +5,7 @@ import { userPermissionOverrideRepository } from "@/repositories/user-permission
 import { staffRepository } from "@/repositories/staff.repository";
 import { SyncScheduler } from "@/services/sync/sync-scheduler";
 import { SyncManager } from "@/services/sync/sync-manager";
+import { supabase } from "@/integrations/supabase/client";
 import type { UserPermissionOverrideSchema } from "@/database/schema";
 import {
   checkPermission,
@@ -99,7 +100,54 @@ export function useAuthorization(): AuthorizationHook {
         if (staffRecord.email) email = staffRecord.email;
       }
 
-      const userOverrides = await userPermissionOverrideRepository.getOverridesForUser(staffId, authUserId, email);
+      // Build all candidate identifiers (staff UUID, auth UUID, email)
+      const candidateIds = Array.from(new Set([staffId, authUserId, email].filter(Boolean) as string[]));
+
+      let userOverrides = await userPermissionOverrideRepository.getOverridesForUser(staffId, authUserId, email);
+
+      // Fallback: if no local overrides found, query Supabase directly.
+      // This handles fresh browser sessions where IndexedDB is not yet populated.
+      if ((!userOverrides || userOverrides.length === 0) && typeof navigator !== "undefined" && navigator.onLine) {
+        try {
+          const { data: remoteOverrides } = await (supabase as any)
+            .from("user_permission_overrides")
+            .select("*")
+            .in("user_id", candidateIds);
+
+          if (remoteOverrides && remoteOverrides.length > 0) {
+            // Write them into local IndexedDB for subsequent reads
+            for (const rov of remoteOverrides) {
+              await userPermissionOverrideRepository.upsertLocal({
+                id: rov.id,
+                organizationId: rov.organization_id || "org-default",
+                userId: rov.user_id,
+                permissionId: rov.permission_id,
+                effect: rov.effect,
+                reason: rov.reason ?? null,
+                createdBy: rov.created_by || "system",
+                createdAt: rov.created_at ? new Date(rov.created_at).getTime() : Date.now(),
+                updatedAt: rov.updated_at ? new Date(rov.updated_at).getTime() : Date.now(),
+                sync_status: "synced",
+              });
+            }
+            userOverrides = remoteOverrides.map((rov: any) => ({
+              id: rov.id,
+              organizationId: rov.organization_id || "org-default",
+              userId: rov.user_id,
+              permissionId: rov.permission_id,
+              effect: rov.effect,
+              reason: rov.reason ?? null,
+              createdBy: rov.created_by || "system",
+              createdAt: rov.created_at ? new Date(rov.created_at).getTime() : Date.now(),
+              updatedAt: rov.updated_at ? new Date(rov.updated_at).getTime() : Date.now(),
+              sync_status: "synced" as const,
+            }));
+          }
+        } catch (remoteErr) {
+          console.warn("[useAuthorization] Supabase override fallback failed:", remoteErr);
+        }
+      }
+
       setOverrides(userOverrides || []);
     } catch (err) {
       console.error("[useAuthorization] Error loading overrides:", err);

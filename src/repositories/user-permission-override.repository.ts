@@ -121,6 +121,16 @@ export class UserPermissionOverrideRepository extends BaseRepository<UserPermiss
 
     return matching.length;
   }
+
+  /** Upsert a permission override locally (no sync enqueue — for cache hydration from remote) */
+  async upsertLocal(record: UserPermissionOverrideSchema): Promise<void> {
+    await db.user_permission_overrides.put(record);
+  }
+
+  /** Get all permission overrides in local IndexedDB */
+  async getAll(): Promise<UserPermissionOverrideSchema[]> {
+    return db.user_permission_overrides.toArray();
+  }
 }
 
 export const userPermissionOverrideRepository = new UserPermissionOverrideRepository();

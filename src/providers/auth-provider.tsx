@@ -76,20 +76,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile((profileRes.data as Profile | null) ?? null);
 
         let fetchedRoles = ((rolesRes.data ?? []) as { role: AppRole }[]).map((r) => r.role);
-        if (fetchedRoles.length === 0) {
-          const metaRole = session?.user?.user_metadata?.role as AppRole | undefined;
+        
+        // Sanity check: If user_metadata or local staff record explicitly defines role as "staff" or "manager",
+        // prevent unwanted "admin" role resolution from orphaned user_roles records
+        const metaRole = session?.user?.user_metadata?.role as AppRole | undefined;
+        const staffRecord =
+          (await staffRepository.getByAuthUserId(userId)) ||
+          (session?.user?.email ? await staffRepository.getByEmail(session.user.email) : undefined);
+
+        if (metaRole === "staff" || metaRole === "manager" || staffRecord?.role === "staff" || staffRecord?.role === "sales_staff") {
+          fetchedRoles = [metaRole === "manager" ? "manager" : "staff"];
+        } else if (fetchedRoles.length === 0) {
           if (metaRole) {
             fetchedRoles = [metaRole];
+          } else if (staffRecord?.role) {
+            fetchedRoles = [staffRecord.role as AppRole];
           } else {
-            // Check local staff record
-            const staffRecord =
-              (await staffRepository.getByAuthUserId(userId)) ||
-              (session?.user?.email ? await staffRepository.getByEmail(session.user.email) : undefined);
-            if (staffRecord?.role) {
-              fetchedRoles = [staffRecord.role as AppRole];
-            } else {
-              fetchedRoles = ["staff"];
-            }
+            fetchedRoles = ["staff"];
           }
         }
         setRoles(fetchedRoles);
