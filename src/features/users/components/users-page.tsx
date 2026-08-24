@@ -7,9 +7,11 @@ import { createStaffUser, sendStaffResetLink, deleteStaffUser } from "../staff.f
 import { staffRepository, generateTemporaryPassword, type StaffCredentials } from "@/repositories/staff.repository";
 import { branchRepository } from "@/repositories/branch.repository";
 import { roleRepository } from "@/repositories/role.repository";
+import { userPermissionOverrideRepository } from "@/repositories/user-permission-override.repository";
 import { SyncScheduler } from "@/services/sync/sync-scheduler";
 import type { BranchSchema, RoleSchema, StaffSchema } from "@/database/schema";
 import { StaffFormModal } from "./staff-form-modal";
+import { StaffPermissionsTab } from "./staff-permissions-tab";
 import { PermissionGuard } from "@/components/common/permission-guard";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useBranch } from "@/providers/branch-provider";
@@ -25,6 +27,8 @@ export function UsersPage() {
   const [staff, setStaff] = useState<StaffSchema[]>([]);
   const [branches, setBranches] = useState<BranchSchema[]>([]);
   const [roles, setRoles] = useState<RoleSchema[]>([]);
+  const [overrideMap, setOverrideMap] = useState<Record<string, number>>({});
+  const [permissionsTarget, setPermissionsTarget] = useState<StaffSchema | null>(null);
   const [filterBranchId, setFilterBranchId] = useState<string>("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffSchema | null>(null);
@@ -41,11 +45,19 @@ export function UsersPage() {
       // Trigger sync catch-up and pull sync to reconcile remote changes
       await SyncScheduler.triggerSync();
 
-      const [branchList, staffList, roleList] = await Promise.all([
+      const [branchList, staffList, roleList, allOverrides] = await Promise.all([
         branchRepository.ensureSeedBranches(),
         staffRepository.getAll(),
         roleRepository.ensureSystemRoles(),
+        userPermissionOverrideRepository.getAll().catch(() => []),
       ]);
+
+      const counts: Record<string, number> = {};
+      for (const ov of allOverrides) {
+        counts[ov.userId] = (counts[ov.userId] || 0) + 1;
+      }
+      setOverrideMap(counts);
+
       setBranches(isSuperAdmin ? branchList : branchList.filter((branch) => branch.id === activeBranch?.id));
       setRoles(roleList);
       setStaff(
@@ -303,7 +315,16 @@ export function UsersPage() {
                     <td className="px-6 py-4 align-top text-sm text-muted-foreground">
                       {roles.find((role) => role.id === member.roleId || role.code === member.roleId || role.id === member.role || role.code === member.role)?.name ?? String(member.roleId ?? member.role ?? "Unassigned")}
                     </td>
-                    <td className="px-6 py-4 align-top text-sm text-muted-foreground">{member.employeeCode ?? "—"}</td>
+                    <td className="px-6 py-4 align-top text-sm text-muted-foreground font-mono">
+                      {member.employeeCode ?? "—"}
+                      {overrideMap[member.id] > 0 && (
+                        <div className="mt-1">
+                          <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-500 bg-amber-500/10 px-1.5 py-0 font-sans">
+                            {overrideMap[member.id]} custom overrides
+                          </Badge>
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 align-top">
                       <Badge variant={member.status === "active" ? "secondary" : "outline"} className="rounded-full px-2 py-1 text-[11px] uppercase tracking-[.18em]">
                         {member.status}
@@ -311,6 +332,18 @@ export function UsersPage() {
                     </td>
                     <td className="px-6 py-4 align-top text-right">
                       <div className="flex justify-end gap-1">
+                        <PermissionGuard permission="staff:permissions">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setPermissionsTarget(member)}
+                            title="Manage Individual Permissions"
+                            className="text-primary hover:text-primary hover:bg-primary/10"
+                          >
+                            <Shield className="size-4" />
+                          </Button>
+                        </PermissionGuard>
+
                         <PermissionGuard permission="staff:update">
                           <Button variant="ghost" size="icon-sm" onClick={() => setEditingStaff(member)} title="Edit Staff">
                             <Edit2 className="size-4" />
@@ -552,6 +585,29 @@ export function UsersPage() {
               </Button>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Permissions Management Workspace Dialog */}
+      <Dialog open={!!permissionsTarget} onOpenChange={(open) => !open && setPermissionsTarget(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Shield className="w-5 h-5 text-primary" />
+              Staff Individual Permissions Workspace
+            </DialogTitle>
+            <DialogDescription>
+              Configure granular permission overrides for individual staff members without altering role defaults.
+            </DialogDescription>
+          </DialogHeader>
+
+          {permissionsTarget && (
+            <StaffPermissionsTab
+              staff={permissionsTarget}
+              role={roles.find((r) => r.id === permissionsTarget.roleId || r.code === permissionsTarget.roleId || r.id === permissionsTarget.role || r.code === permissionsTarget.role)}
+              onUpdated={loadData}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
