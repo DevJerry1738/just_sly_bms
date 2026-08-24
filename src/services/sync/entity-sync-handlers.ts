@@ -615,3 +615,31 @@ SyncManager.registerHandler("stock_count_items", async (operationType, payload) 
   }
   return { success: !error, error: error?.message };
 });
+
+// 12. User Permission Overrides Handler
+SyncManager.registerHandler("user_permission_overrides", async (operationType, payload) => {
+  if (operationType === "DELETE") {
+    const id = payload["id"] as string;
+    const { error } = await client.from("user_permission_overrides").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+
+  const remoteRecord = {
+    id: payload["id"],
+    organization_id: payload["organizationId"] || "org-default",
+    user_id: payload["userId"],
+    permission_id: payload["permissionId"],
+    effect: payload["effect"],
+    reason: toCleanStringOrNull(payload["reason"]),
+    created_by: payload["createdBy"] || "system",
+    updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
+  };
+
+  const { error } = await client.from("user_permission_overrides").upsert(remoteRecord, { onConflict: "id" });
+  if (!error) {
+    await db.user_permission_overrides.update(payload["id"] as string, { sync_status: "synced" });
+  } else {
+    console.error("[Sync] User permission overrides upsert error:", error.message);
+  }
+  return { success: !error, error: error?.message };
+});

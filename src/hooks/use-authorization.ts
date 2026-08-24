@@ -1,16 +1,23 @@
-import { useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { useBranch } from "@/providers/branch-provider";
+import { userPermissionOverrideRepository } from "@/repositories/user-permission-override.repository";
+import { staffRepository } from "@/repositories/staff.repository";
+import { SyncScheduler } from "@/services/sync/sync-scheduler";
+import { SyncManager } from "@/services/sync/sync-manager";
+import type { UserPermissionOverrideSchema } from "@/database/schema";
 import {
   checkPermission,
   collectPermissions,
   ROLE_PERMISSIONS,
-  SYSTEM_ROLE_CODES,
+  PROTECTED_PERMISSIONS,
   type Permission,
   type RoleDefinition,
   type SystemRoleCode,
 } from "@/types/rbac";
 import type { AppRole } from "@/types/auth";
+
+export type PermissionSource = "GRANT" | "DENY" | "ROLE" | "DEFAULT_DENY" | "PROTECTED";
 
 // ---------------------------------------------------------------------------
 // Map legacy AppRole -> RBAC RoleDefinition (bridge until DB roles are loaded)
@@ -40,14 +47,18 @@ function buildLegacyRoleDefinition(appRole: AppRole): RoleDefinition {
 // useAuthorization hook
 // ---------------------------------------------------------------------------
 export interface AuthorizationHook {
-  /** All permissions the current user holds */
+  /** All effective permissions the current user holds */
   permissions: Permission[];
+  /** Active individual permission overrides for current user */
+  overrides: UserPermissionOverrideSchema[];
   /** Check if the user has a specific permission */
   hasPermission: (permission: Permission) => boolean;
   /** Check if the user has any of the listed permissions */
   hasAnyPermission: (permissions: Permission[]) => boolean;
   /** Check if the user has all of the listed permissions */
   hasAllPermissions: (permissions: Permission[]) => boolean;
+  /** Get resolution source of a permission for current user */
+  getPermissionSource: (permission: Permission) => PermissionSource;
   /** Check if user can access a route (by required permission) */
   canAccessRoute: (requiredPermission?: Permission) => boolean;
   /** True if the user is a super admin (has settings:manage) */
@@ -58,18 +69,73 @@ export interface AuthorizationHook {
   roleDefinitions: RoleDefinition[];
   /** Current active branch id */
   activeBranchId: string | null;
+  /** Refetch overrides from local database */
+  refetchPermissions: () => Promise<void>;
 }
 
 export function useAuthorization(): AuthorizationHook {
-  const { roles, isLoading } = useAuth();
+  const { user, roles, isLoading } = useAuth();
   const { activeBranch } = useBranch();
+  const [overrides, setOverrides] = useState<UserPermissionOverrideSchema[]>([]);
+
+  const loadOverrides = useCallback(async () => {
+    if (!user?.id && !user?.email) {
+      setOverrides([]);
+      return;
+    }
+    try {
+      // Find matching local staff record to get staff.id if user.id is authUserId
+      let staffId = user.id;
+      let authUserId = user.id;
+      let email = user.email ?? undefined;
+
+      const staffRecord =
+        (await staffRepository.getByAuthUserId(user.id)) ||
+        (user.email ? await staffRepository.getByEmail(user.email) : undefined);
+
+      if (staffRecord) {
+        staffId = staffRecord.id;
+        if (staffRecord.authUserId) authUserId = staffRecord.authUserId;
+        if (staffRecord.email) email = staffRecord.email;
+      }
+
+      const userOverrides = await userPermissionOverrideRepository.getOverridesForUser(staffId, authUserId, email);
+      setOverrides(userOverrides || []);
+    } catch (err) {
+      console.error("[useAuthorization] Error loading overrides:", err);
+    }
+  }, [user?.id, user?.email]);
+
+  useEffect(() => {
+    void loadOverrides();
+
+    // Trigger background sync pull in parallel
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      void SyncScheduler.triggerSync().catch(() => {});
+    }
+
+    const unsubscribe = SyncManager.subscribe((event) => {
+      if (event === "sync:complete" || event === "sync:pull:complete") {
+        void loadOverrides();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [loadOverrides]);
+
+  const effectiveRoles = useMemo<AppRole[]>(() => {
+    if (roles.length > 0) return roles;
+    return ["staff"];
+  }, [roles]);
 
   const roleDefinitions = useMemo<RoleDefinition[]>(() => {
-    if (isLoading || roles.length === 0) return [];
-    return roles.map((r) => buildLegacyRoleDefinition(r));
-  }, [roles, isLoading]);
+    if (isLoading) return [];
+    return effectiveRoles.map((r) => buildLegacyRoleDefinition(r));
+  }, [effectiveRoles, isLoading]);
 
-  const permissions = useMemo<Permission[]>(() => {
+  const rolePermissions = useMemo<Permission[]>(() => {
     return collectPermissions(roleDefinitions);
   }, [roleDefinitions]);
 
@@ -83,38 +149,122 @@ export function useAuthorization(): AuthorizationHook {
     [roles]
   );
 
-  const hasPermission = (permission: Permission): boolean => {
-    if (isLoading) return false;
-    if (isSuperAdmin) return true;
-    return checkPermission(permissions, permission);
-  };
+  /**
+   * Calculate effective permissions by layering overrides on top of role defaults.
+   * Priority:
+   * 1. Super Admin -> All true
+   * 2. Explicit DENY -> False
+   * 3. Explicit GRANT -> True
+   * 4. Role Permission -> True
+   * 5. Default Deny -> False
+   */
+  const permissions = useMemo<Permission[]>(() => {
+    const grantSet = new Set<Permission>();
+    const denySet = new Set<Permission>();
 
-  const hasAnyPermission = (perms: Permission[]): boolean => {
-    if (isLoading) return false;
-    if (isSuperAdmin) return true;
-    return perms.some((p) => checkPermission(permissions, p));
-  };
+    for (const ov of overrides) {
+      if (ov.effect === "DENY") denySet.add(ov.permissionId as Permission);
+      if (ov.effect === "GRANT") grantSet.add(ov.permissionId as Permission);
+    }
 
-  const hasAllPermissions = (perms: Permission[]): boolean => {
-    if (isLoading) return false;
-    if (isSuperAdmin) return true;
-    return perms.every((p) => checkPermission(permissions, p));
-  };
+    if (isSuperAdmin) {
+      // Even Super Admin respects explicit DENY overrides if manually configured
+      const adminPerms = new Set(rolePermissions);
+      for (const d of denySet) {
+        adminPerms.delete(d);
+      }
+      return Array.from(adminPerms);
+    }
 
-  const canAccessRoute = (requiredPermission?: Permission): boolean => {
-    if (!requiredPermission) return true;
-    return hasPermission(requiredPermission);
-  };
+    const result = new Set<Permission>();
+
+    // Add role permissions unless explicitly denied
+    for (const p of rolePermissions) {
+      if (!denySet.has(p)) {
+        result.add(p);
+      }
+    }
+
+    // Add explicitly granted permissions unless explicitly denied
+    for (const g of grantSet) {
+      if (!denySet.has(g)) {
+        result.add(g);
+      }
+    }
+
+    return Array.from(result);
+  }, [rolePermissions, overrides, isSuperAdmin]);
+
+  const getPermissionSource = useCallback(
+    (permission: Permission): PermissionSource => {
+      if (PROTECTED_PERMISSIONS.includes(permission) && !isSuperAdmin) {
+        return "PROTECTED";
+      }
+
+      const override = overrides.find((o) => o.permissionId === permission);
+      if (override?.effect === "DENY") return "DENY";
+      if (override?.effect === "GRANT") return "GRANT";
+      if (rolePermissions.includes(permission)) return "ROLE";
+      return "DEFAULT_DENY";
+    },
+    [overrides, rolePermissions, isSuperAdmin]
+  );
+
+  const hasPermission = useCallback(
+    (permission: Permission): boolean => {
+      if (isLoading) return false;
+
+      // Check explicit override FIRST (Explicit DENY > Explicit GRANT > Super Admin > Role Defaults)
+      const override = overrides.find((o) => o.permissionId === permission);
+      if (override) {
+        return override.effect === "GRANT";
+      }
+
+      if (isSuperAdmin) return true;
+
+      return checkPermission(rolePermissions, permission);
+    },
+    [isLoading, isSuperAdmin, overrides, rolePermissions]
+  );
+
+  const hasAnyPermission = useCallback(
+    (perms: Permission[]): boolean => {
+      if (isLoading) return false;
+      if (isSuperAdmin) return true;
+      return perms.some((p) => hasPermission(p));
+    },
+    [isLoading, isSuperAdmin, hasPermission]
+  );
+
+  const hasAllPermissions = useCallback(
+    (perms: Permission[]): boolean => {
+      if (isLoading) return false;
+      if (isSuperAdmin) return true;
+      return perms.every((p) => hasPermission(p));
+    },
+    [isLoading, isSuperAdmin, hasPermission]
+  );
+
+  const canAccessRoute = useCallback(
+    (requiredPermission?: Permission): boolean => {
+      if (!requiredPermission) return true;
+      return hasPermission(requiredPermission);
+    },
+    [hasPermission]
+  );
 
   return {
     permissions,
+    overrides,
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,
+    getPermissionSource,
     canAccessRoute,
     isSuperAdmin,
     isBranchManager,
     roleDefinitions,
     activeBranchId: activeBranch?.id ?? null,
+    refetchPermissions: loadOverrides,
   };
 }

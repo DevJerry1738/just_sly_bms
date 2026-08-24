@@ -33,6 +33,21 @@ export class StaffRepository extends BaseRepository<StaffSchema> {
     super("staff", db.staff);
   }
 
+  /** Get staff by authUserId */
+  async getByAuthUserId(authUserId: string): Promise<StaffSchema | undefined> {
+    if (!authUserId) return undefined;
+    const all = await this.getAll();
+    return all.find((s) => s.authUserId === authUserId);
+  }
+
+  /** Get staff by email */
+  async getByEmail(email: string): Promise<StaffSchema | undefined> {
+    if (!email) return undefined;
+    const lower = email.toLowerCase();
+    const all = await this.getAll();
+    return all.find((s) => s.email?.toLowerCase() === lower);
+  }
+
   /** Get all staff in a given branch */
   async getByBranch(branchId: string): Promise<StaffSchema[]> {
     return db.staff.where("branchId").equals(branchId).toArray();

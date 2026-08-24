@@ -11,6 +11,8 @@ import { SyncScheduler } from "@/services/sync/sync-scheduler";
 import type { BranchSchema, RoleSchema, StaffSchema } from "@/database/schema";
 import { StaffFormModal } from "./staff-form-modal";
 import { PermissionGuard } from "@/components/common/permission-guard";
+import { useAuthorization } from "@/hooks/use-authorization";
+import { useBranch } from "@/providers/branch-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +20,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function UsersPage() {
+  const { isSuperAdmin } = useAuthorization();
+  const { activeBranch } = useBranch();
   const [staff, setStaff] = useState<StaffSchema[]>([]);
   const [branches, setBranches] = useState<BranchSchema[]>([]);
   const [roles, setRoles] = useState<RoleSchema[]>([]);
@@ -42,9 +46,13 @@ export function UsersPage() {
         staffRepository.getAll(),
         roleRepository.ensureSystemRoles(),
       ]);
-      setBranches(branchList);
+      setBranches(isSuperAdmin ? branchList : branchList.filter((branch) => branch.id === activeBranch?.id));
       setRoles(roleList);
-      setStaff(staffList.sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)));
+      setStaff(
+        staffList
+          .filter((member) => isSuperAdmin || member.branchId === activeBranch?.id)
+          .sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)),
+      );
     } catch (error) {
       console.error("[UsersPage] Failed to load staff, branches or roles:", error);
     } finally {
@@ -54,7 +62,7 @@ export function UsersPage() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [activeBranch?.id, isSuperAdmin]);
 
   const filteredStaff = useMemo(
     () => (filterBranchId ? staff.filter((member) => member.branchId === filterBranchId) : staff),
@@ -254,7 +262,7 @@ export function UsersPage() {
               <SelectValue placeholder="All Branches" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Branches</SelectItem>
+              {isSuperAdmin && <SelectItem value="all">All Branches</SelectItem>}
               {branches.map((b) => (
                 <SelectItem key={b.id} value={b.id}>
                   {b.name}

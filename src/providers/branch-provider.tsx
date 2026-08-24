@@ -16,24 +16,27 @@ const BranchContext = createContext<BranchContextValue | null>(null);
 const STORAGE_KEY = "justsly.active_branch_id";
 
 export function BranchProvider({ children }: { children: ReactNode }) {
-  const { user, profile } = useAuth();
+  const { user, profile, roles } = useAuth();
   const [branches, setBranches] = useState<BranchSchema[]>([]);
   const [activeBranch, setActiveBranch] = useState<BranchSchema | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [status, setStatus] = useState<BranchResolutionResult["status"]>("loading");
+  const [assignedBranchId, setAssignedBranchId] = useState<string | null>(null);
+  const canViewAllBranches = roles.includes("admin");
 
   const loadBranches = async () => {
     setIsLoading(true);
-    const result = await branchContextService.resolveForUser(user, profile);
+    const result = await branchContextService.resolveForUser(user, profile, canViewAllBranches);
     setBranches(result.branches);
     setActiveBranch(result.activeBranch);
+    setAssignedBranchId(result.assignedBranchId ?? null);
     setStatus(result.status);
     setIsLoading(false);
   };
 
   useEffect(() => {
     void loadBranches();
-  }, [user?.id, user?.email, profile?.branch_id]);
+  }, [user?.id, user?.email, profile?.branch_id, canViewAllBranches]);
 
   useEffect(() => {
     const unsubscribe = SyncManager.subscribe((event) => {
@@ -42,12 +45,13 @@ export function BranchProvider({ children }: { children: ReactNode }) {
       }
     });
     return unsubscribe;
-  }, [user?.id, user?.email, profile?.branch_id]);
+  }, [user?.id, user?.email, profile?.branch_id, canViewAllBranches]);
 
   useEffect(() => {
     const unsubscribe = branchContextService.subscribe((state) => {
       setBranches(state.branches);
       setActiveBranch(state.activeBranch);
+      setAssignedBranchId(state.assignedBranchId ?? null);
       setStatus(state.status);
       setIsLoading(state.status === "loading");
     });
@@ -55,7 +59,12 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setActiveBranchId = async (id: string) => {
-    const result = await branchContextService.setActiveBranchId(id, branches);
+    const result = await branchContextService.setActiveBranchId(
+      id,
+      branches,
+      canViewAllBranches,
+      assignedBranchId,
+    );
     setBranches(result.branches);
     setActiveBranch(result.activeBranch);
     setStatus(result.status);

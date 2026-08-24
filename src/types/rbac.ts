@@ -55,7 +55,27 @@ export type Permission =
   | "inventory:stock_count"
   | "inventory:export"
   | "inventory:manage_batches"
-  | "inventory:acknowledge_alerts";
+  | "inventory:acknowledge_alerts"
+  | "staff:permissions"
+  | "roles:view"
+  | "roles:create"
+  | "roles:edit"
+  | "roles:delete"
+  | "wholesale:view"
+  | "wholesale:manage";
+
+/** List of sensitive permissions that require elevated authorization to grant or delegate */
+export const PROTECTED_PERMISSIONS: Permission[] = [
+  "products:view_cost",
+  "products:edit_cost",
+  "inventory:view_cost",
+  "staff:permissions",
+  "roles:create",
+  "roles:edit",
+  "roles:delete",
+  "audit_logs:export",
+  "settings:manage",
+];
 
 // ---------------------------------------------------------------------------
 // Built-in system role codes (cannot be deleted)

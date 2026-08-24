@@ -166,7 +166,16 @@ export function SaleDetailModal({
               </div>
               <div>
                 <span className="text-muted-foreground block">Cashier</span>
-                <span className="font-semibold">{sale.createdByName ?? sale.createdBy}</span>
+                <span className="font-semibold">
+                  {(() => {
+                    const raw = sale.createdByName ?? sale.createdBy;
+                    if (raw && raw.includes("@")) {
+                      const uname = raw.split("@")[0];
+                      return uname.replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                    }
+                    return raw || "Cashier";
+                  })()}
+                </span>
               </div>
               <div>
                 <span className="text-muted-foreground block">Payment Method</span>

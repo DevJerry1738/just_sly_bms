@@ -14,11 +14,26 @@ import { Badge } from "@/components/ui/badge";
 
 export function BranchSwitcher() {
   const { activeBranch, branches, setActiveBranchId } = useBranch();
-  const { isSuperAdmin, isBranchManager } = useAuthorization();
+  const { isSuperAdmin } = useAuthorization();
 
   if (!branches.length) return null;
 
-  const canSeeAllBranches = isSuperAdmin || isBranchManager;
+  const canSeeAllBranches = isSuperAdmin;
+
+  if (!canSeeAllBranches && branches.length === 1) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled
+        className="h-8 gap-2 px-2.5 text-xs font-normal bg-card border-border/80 opacity-100"
+        aria-label={`Active branch: ${branches[0].name}`}
+      >
+        <Building2 className="size-3.5 text-primary shrink-0" />
+        <span className="max-w-36 truncate font-semibold text-foreground">{branches[0].name}</span>
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>

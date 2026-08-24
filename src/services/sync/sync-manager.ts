@@ -21,7 +21,7 @@ export class SyncManager {
     return () => this.listeners.delete(listener);
   }
 
-  private static emit(event: string, data?: unknown): void {
+  static emit(event: string, data?: unknown): void {
     this.listeners.forEach((listener) => listener(event, data));
   }
 

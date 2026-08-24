@@ -24,6 +24,15 @@ function formatDate(ts: number): string {
   });
 }
 
+function formatCashierName(rawName?: string | null, fallbackId?: string): string {
+  const val = rawName || fallbackId || "Cashier";
+  if (val.includes("@")) {
+    const username = val.split("@")[0];
+    return username.replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return val;
+}
+
 export function ReceiptView({
   open,
   onOpenChange,
@@ -125,7 +134,7 @@ export function ReceiptView({
             </div>
             <div className="row" style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
               <span>Cashier</span>
-              <span>{sale.createdByName ?? sale.createdBy}</span>
+              <span>{formatCashierName(sale.createdByName, sale.createdBy)}</span>
             </div>
 
             <div className="divider" style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
@@ -224,7 +233,7 @@ export function ReceiptView({
               </div>
               <div>
                 <span className="text-gray-500">Cashier: </span>
-                <span>{sale.createdByName ?? sale.createdBy}</span>
+                <span>{formatCashierName(sale.createdByName, sale.createdBy)}</span>
               </div>
               <div className="text-right">
                 <span className="text-gray-500">Payment Method: </span>

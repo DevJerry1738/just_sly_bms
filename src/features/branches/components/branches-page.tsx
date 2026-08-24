@@ -7,12 +7,16 @@ import type { BranchSchema } from "@/database/schema";
 import { BranchFormModal } from "./branch-form-modal";
 import { BranchSettingsModal } from "./branch-settings-modal";
 import { PermissionGuard } from "@/components/common/permission-guard";
+import { useAuthorization } from "@/hooks/use-authorization";
+import { useBranch } from "@/providers/branch-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 export function BranchesPage() {
+  const { isSuperAdmin } = useAuthorization();
+  const { activeBranch } = useBranch();
   const [branches, setBranches] = useState<BranchSchema[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState<BranchSchema | null>(null);
@@ -24,7 +28,10 @@ export function BranchesPage() {
     try {
       await SyncScheduler.triggerSync();
       const list = await branchRepository.ensureSeedBranches();
-      setBranches(list.sort((a, b) => a.name.localeCompare(b.name)));
+      const visibleBranches = isSuperAdmin
+        ? list
+        : list.filter((branch) => branch.id === activeBranch?.id);
+      setBranches(visibleBranches.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
       console.error("[BranchesPage] Failed to load branches:", error);
     } finally {
@@ -34,7 +41,7 @@ export function BranchesPage() {
 
   useEffect(() => {
     void loadBranches();
-  }, []);
+  }, [activeBranch?.id, isSuperAdmin]);
 
   const totals = useMemo(
     () => ({

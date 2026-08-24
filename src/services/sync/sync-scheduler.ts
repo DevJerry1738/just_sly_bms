@@ -698,6 +698,27 @@ export class SyncScheduler {
           });
         }
       }
+
+      // 10. Pull user_permission_overrides
+      const { data: remoteOverrides, error: ovErr } = await client.from("user_permission_overrides").select("*");
+      if (!ovErr && remoteOverrides) {
+        for (const rov of remoteOverrides) {
+          await db.user_permission_overrides.put({
+            id: rov.id,
+            organizationId: rov.organization_id || "org-default",
+            userId: rov.user_id,
+            permissionId: rov.permission_id,
+            effect: rov.effect,
+            reason: rov.reason || null,
+            createdBy: rov.created_by || "system",
+            createdAt: rov.created_at ? new Date(rov.created_at).getTime() : Date.now(),
+            updatedAt: rov.updated_at ? new Date(rov.updated_at).getTime() : Date.now(),
+            sync_status: "synced" as const,
+          });
+        }
+      }
+
+      SyncManager.emit("sync:pull:complete", { timestamp: Date.now() });
     } catch (err) {
       console.warn("[SyncScheduler] Error during pull sync:", err);
     }

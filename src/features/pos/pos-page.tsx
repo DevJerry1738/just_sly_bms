@@ -223,6 +223,11 @@ export function PosPage() {
     paymentMethod: "cash" | "bank_transfer" | "card",
     discountAmount: number
   ) => {
+    if (!hasPermission("sales:create")) {
+      toast.error("Access Denied: You do not have permission to process sales transactions.");
+      return;
+    }
+
     if (!activeBranch?.id || !user?.id) {
       toast.error("A branch and active user are required to complete a sale.");
       return;
@@ -232,7 +237,7 @@ export function PosPage() {
       const sale = await posService.createDraftSale({
         branchId: activeBranch.id,
         createdBy: user.id,
-        createdByName: user.email ?? user.id,
+        createdByName: user.fullName ?? user.email ?? user.id,
         items: cart,
         paymentMethod,
         amountTendered: Math.max(0, total - discountAmount),

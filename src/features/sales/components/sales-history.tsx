@@ -233,7 +233,14 @@ export function SalesHistory() {
                     })}
                   </td>
                   <td className="p-3 text-muted-foreground">
-                    {sale.createdByName ?? sale.createdBy}
+                    {(() => {
+                      const raw = sale.createdByName ?? sale.createdBy;
+                      if (raw && raw.includes("@")) {
+                        const uname = raw.split("@")[0];
+                        return uname.replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                      }
+                      return raw || "Cashier";
+                    })()}
                   </td>
                   <td className="p-3 capitalize">{sale.paymentMethod.replace("_", " ")}</td>
                   <td className="p-3 text-right font-bold">₦{sale.totalAmount.toFixed(2)}</td>

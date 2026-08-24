@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 
 import { useAuthorization } from "@/hooks/use-authorization";
+import { useBranch } from "@/providers/branch-provider";
 import { auditLogRepository, type AuditLogFilters } from "@/repositories/audit-log.repository";
 import { branchRepository } from "@/repositories/branch.repository";
 import type { AuditLogSchema, BranchSchema } from "@/database/schema";
@@ -31,7 +32,8 @@ import { CardsSkeleton } from "@/components/common/skeletons";
 import { AuditDetailDrawer } from "./audit-detail-drawer";
 
 export function AuditLogsPage() {
-  const { hasPermission } = useAuthorization();
+  const { hasPermission, isSuperAdmin } = useAuthorization();
+  const { activeBranch } = useBranch();
   const canView = hasPermission("audit_logs:view");
   const canExport = hasPermission("audit_logs:export");
 
@@ -55,8 +57,13 @@ export function AuditLogsPage() {
     setLoading(true);
     try {
       const [fetchedLogs, fetchedBranches, fetchedActors, fetchedModules] = await Promise.all([
-        auditLogRepository.queryLogs(filters, 150),
-        branchRepository.getAll(),
+        auditLogRepository.queryLogs(
+          isSuperAdmin ? filters : { ...filters, branchId: activeBranch?.id ?? "NONE" },
+          150,
+        ),
+        isSuperAdmin
+          ? branchRepository.getAll()
+          : Promise.resolve(activeBranch ? [activeBranch] : []),
         auditLogRepository.getActors(),
         auditLogRepository.getModules(),
       ]);
@@ -70,7 +77,7 @@ export function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [canView, filters]);
+  }, [activeBranch, canView, filters, isSuperAdmin]);
 
   useEffect(() => {
     loadData();
@@ -214,7 +221,7 @@ export function AuditLogsPage() {
                 <SelectValue placeholder="Filter Branch" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ALL">All Branches</SelectItem>
+                {isSuperAdmin && <SelectItem value="ALL">All Branches</SelectItem>}
                 {branches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>
                     {b.name} ({b.code})

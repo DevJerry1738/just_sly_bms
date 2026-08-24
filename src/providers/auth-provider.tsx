@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
+import { staffRepository } from "@/repositories/staff.repository";
 import { DomainEvents } from "@/services/events/domain-events";
 import type { AppRole, AuthState, Profile } from "@/types/auth";
 
@@ -73,7 +74,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ]);
         if (!active) return;
         setProfile((profileRes.data as Profile | null) ?? null);
-        setRoles(((rolesRes.data ?? []) as { role: AppRole }[]).map((r) => r.role));
+
+        let fetchedRoles = ((rolesRes.data ?? []) as { role: AppRole }[]).map((r) => r.role);
+        if (fetchedRoles.length === 0) {
+          const metaRole = session?.user?.user_metadata?.role as AppRole | undefined;
+          if (metaRole) {
+            fetchedRoles = [metaRole];
+          } else {
+            // Check local staff record
+            const staffRecord =
+              (await staffRepository.getByAuthUserId(userId)) ||
+              (session?.user?.email ? await staffRepository.getByEmail(session.user.email) : undefined);
+            if (staffRecord?.role) {
+              fetchedRoles = [staffRecord.role as AppRole];
+            } else {
+              fetchedRoles = ["staff"];
+            }
+          }
+        }
+        setRoles(fetchedRoles);
       } catch (err) {
         console.warn("[auth-provider] Could not fetch remote profile/roles (offline mode):", err);
       }
@@ -81,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, session?.user?.email, session?.user?.user_metadata]);
 
   const value = useMemo<AuthState>(() => {
     const user = session?.user

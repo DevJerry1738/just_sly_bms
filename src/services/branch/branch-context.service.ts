@@ -6,6 +6,7 @@ export type BranchResolutionStatus = "ready" | "no-branch-assigned" | "no-branch
 export interface BranchResolutionResult {
   branches: BranchSchema[];
   activeBranch: BranchSchema | null;
+  assignedBranchId?: string | null;
   status: BranchResolutionStatus;
   reason?: string;
 }
@@ -43,11 +44,44 @@ class BranchContextService {
     return this.currentState;
   }
 
-  async resolveForUser(user: CurrentUserLike | null, profile: CurrentProfileLike | null): Promise<BranchResolutionResult> {
+  async resolveForUser(
+    user: CurrentUserLike | null,
+    profile: CurrentProfileLike | null,
+    canViewAllBranches = false,
+  ): Promise<BranchResolutionResult> {
     try {
-      const branches = await branchRepository.ensureSeedBranches();
-      if (branches.length === 0) {
+      const allBranches = await branchRepository.ensureSeedBranches();
+      if (allBranches.length === 0) {
         const state: BranchResolutionResult = { branches: [], activeBranch: null, status: "no-branches", reason: "No branches are available yet." };
+        this.emit(state);
+        return state;
+      }
+
+      let assignedBranchId = profile?.branch_id ?? null;
+      if (!assignedBranchId && user) {
+        const allStaff = await db.staff.toArray();
+        const staffMember = allStaff.find(
+          (entry) =>
+            (user.id && entry.authUserId === user.id) ||
+            (user.email && entry.email.toLowerCase() === user.email.toLowerCase())
+        );
+        assignedBranchId = staffMember?.branchId ?? null;
+      }
+
+      const branches = canViewAllBranches
+        ? allBranches
+        : allBranches.filter((branch) => branch.id === assignedBranchId);
+      if (!canViewAllBranches && !assignedBranchId) {
+        const state: BranchResolutionResult = {
+          branches: [],
+          activeBranch: null,
+          assignedBranchId: null,
+          status: "no-branch-assigned",
+          reason: "No branch has been assigned to your account.",
+        };
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(BranchContextService.STORAGE_KEY);
+        }
         this.emit(state);
         return state;
       }
@@ -55,39 +89,31 @@ class BranchContextService {
       let activeBranch: BranchSchema | null = null;
       const storedId = typeof window !== "undefined" ? window.localStorage.getItem(BranchContextService.STORAGE_KEY) : null;
 
-      if (user && profile?.branch_id) {
-        activeBranch = branches.find((branch) => branch.id === profile.branch_id) ?? null;
-      }
-
-      if (!activeBranch && user) {
-        const allStaff = await db.staff.toArray();
-        const staffMember = allStaff.find(
-          (entry) =>
-            (user.id && entry.authUserId === user.id) ||
-            (user.email && entry.email.toLowerCase() === user.email.toLowerCase())
-        );
-
-        if (staffMember?.branchId) {
-          activeBranch = branches.find((branch) => branch.id === staffMember.branchId) ?? null;
-        }
-      }
-
-      if (!activeBranch && storedId) {
+      if (canViewAllBranches && storedId === "ALL") {
+        activeBranch = null;
+      } else if (storedId) {
         activeBranch = branches.find((branch) => branch.id === storedId) ?? null;
       }
 
-      if (!activeBranch && this.currentState.activeBranch) {
+      if (!activeBranch && canViewAllBranches && this.currentState.activeBranch) {
         activeBranch = branches.find((branch) => branch.id === this.currentState.activeBranch?.id) ?? null;
+      }
+
+      if (!canViewAllBranches && !activeBranch) {
+        activeBranch = branches.find((branch) => branch.id === assignedBranchId) ?? null;
       }
 
       if (activeBranch && typeof window !== "undefined") {
         window.localStorage.setItem(BranchContextService.STORAGE_KEY, activeBranch.id);
+      } else if (canViewAllBranches && storedId === "ALL" && typeof window !== "undefined") {
+        window.localStorage.setItem(BranchContextService.STORAGE_KEY, "ALL");
       }
 
       const status: BranchResolutionStatus = activeBranch ? "ready" : "no-branch-assigned";
       const state: BranchResolutionResult = {
         branches,
         activeBranch,
+        assignedBranchId,
         status,
         reason: activeBranch ? undefined : "No branch has been assigned to your account.",
       };
@@ -107,14 +133,21 @@ class BranchContextService {
     }
   }
 
-  async setActiveBranchId(id: string, branches: BranchSchema[]): Promise<BranchResolutionResult> {
+  async setActiveBranchId(
+    id: string,
+    branches: BranchSchema[],
+    canViewAllBranches = false,
+    assignedBranchId?: string | null,
+  ): Promise<BranchResolutionResult> {
     if (id === "ALL") {
+      if (!canViewAllBranches) return this.getCurrentState();
       if (typeof window !== "undefined") {
         window.localStorage.setItem(BranchContextService.STORAGE_KEY, "ALL");
       }
       const state: BranchResolutionResult = {
         branches,
         activeBranch: null,
+        assignedBranchId,
         status: "ready",
         reason: undefined,
       };
@@ -123,7 +156,7 @@ class BranchContextService {
     }
 
     const target = branches.find((branch) => branch.id === id) ?? null;
-    if (!target) {
+    if (!target || (!canViewAllBranches && target.id !== assignedBranchId)) {
       return this.getCurrentState();
     }
 
@@ -134,6 +167,7 @@ class BranchContextService {
     const state: BranchResolutionResult = {
       branches,
       activeBranch: target,
+      assignedBranchId,
       status: "ready",
       reason: undefined,
     };

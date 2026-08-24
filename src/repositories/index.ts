@@ -34,6 +34,9 @@ export { stockCountRepository, StockCountRepository } from "./stock-count.reposi
 export { saleItemsRepository, SaleItemsRepository } from "./sale-items.repository";
 export { salePaymentsRepository, SalePaymentsRepository } from "./sale-payments.repository";
 export { saleVoidsRepository, SaleVoidsRepository } from "./sale-voids.repository";
+export * from "./user-preferences.repository";
+export * from "./user-profile.repository";
+export { userPermissionOverrideRepository, UserPermissionOverrideRepository } from "./user-permission-override.repository";
 
 // Sprint 7 — Wholesale Portal
 export { customerRepository, CustomerRepository } from "./customer.repository";
