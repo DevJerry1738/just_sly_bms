@@ -90,9 +90,45 @@ export function useAuthorization(): AuthorizationHook {
       let authUserId = user.id;
       let email = user.email ?? undefined;
 
-      const staffRecord =
+      let staffRecord =
         (await staffRepository.getByAuthUserId(user.id)) ||
         (user.email ? await staffRepository.getByEmail(user.email) : undefined);
+
+      // If local staff record is not yet in IndexedDB, fetch it from Supabase profiles/staff
+      if (!staffRecord && typeof navigator !== "undefined" && navigator.onLine) {
+        try {
+          const { data: remoteStaff } = await (supabase as any)
+            .from("staff")
+            .select("*")
+            .or(`auth_user_id.eq.${user.id},email.eq.${user.email || ""}`)
+            .maybeSingle();
+
+          if (remoteStaff) {
+            staffRecord = {
+              id: remoteStaff.id,
+              authUserId: remoteStaff.auth_user_id || undefined,
+              employeeCode: remoteStaff.employee_code,
+              firstName: remoteStaff.first_name,
+              lastName: remoteStaff.last_name,
+              email: remoteStaff.email,
+              phone: remoteStaff.phone || undefined,
+              role: remoteStaff.role || "staff",
+              roleId: remoteStaff.role || "role-viewer",
+              branchId: remoteStaff.branch_id || "branch-hq-lagos",
+              status: (remoteStaff.status as any) || "active",
+              hireDate: remoteStaff.hire_date || new Date().toISOString().split("T")[0],
+              createdAt: remoteStaff.created_at ? new Date(remoteStaff.created_at).getTime() : Date.now(),
+              updatedAt: remoteStaff.updated_at ? new Date(remoteStaff.updated_at).getTime() : Date.now(),
+              syncVersion: 1,
+              sync_status: "synced" as const,
+            };
+            // Cache in IndexedDB
+            await staffRepository.upsert(staffRecord);
+          }
+        } catch (sErr) {
+          console.warn("[useAuthorization] Error fetching remote staff record:", sErr);
+        }
+      }
 
       if (staffRecord) {
         staffId = staffRecord.id;
@@ -105,17 +141,16 @@ export function useAuthorization(): AuthorizationHook {
 
       let userOverrides = await userPermissionOverrideRepository.getOverridesForUser(staffId, authUserId, email);
 
-      // Fallback: if no local overrides found, query Supabase directly.
-      // This handles fresh browser sessions where IndexedDB is not yet populated.
-      if ((!userOverrides || userOverrides.length === 0) && typeof navigator !== "undefined" && navigator.onLine) {
+      // Always check Supabase when online to ensure latest overrides are active
+      if (typeof navigator !== "undefined" && navigator.onLine) {
         try {
           const { data: remoteOverrides } = await (supabase as any)
             .from("user_permission_overrides")
             .select("*")
             .in("user_id", candidateIds);
 
-          if (remoteOverrides && remoteOverrides.length > 0) {
-            // Write them into local IndexedDB for subsequent reads
+          if (remoteOverrides) {
+            // Write them into local IndexedDB for subsequent offline reads
             for (const rov of remoteOverrides) {
               await userPermissionOverrideRepository.upsertLocal({
                 id: rov.id,
@@ -130,21 +165,23 @@ export function useAuthorization(): AuthorizationHook {
                 sync_status: "synced",
               });
             }
-            userOverrides = remoteOverrides.map((rov: any) => ({
-              id: rov.id,
-              organizationId: rov.organization_id || "org-default",
-              userId: rov.user_id,
-              permissionId: rov.permission_id,
-              effect: rov.effect,
-              reason: rov.reason ?? null,
-              createdBy: rov.created_by || "system",
-              createdAt: rov.created_at ? new Date(rov.created_at).getTime() : Date.now(),
-              updatedAt: rov.updated_at ? new Date(rov.updated_at).getTime() : Date.now(),
-              sync_status: "synced" as const,
-            }));
+            if (remoteOverrides.length > 0) {
+              userOverrides = remoteOverrides.map((rov: any) => ({
+                id: rov.id,
+                organizationId: rov.organization_id || "org-default",
+                userId: rov.user_id,
+                permissionId: rov.permission_id,
+                effect: rov.effect,
+                reason: rov.reason ?? null,
+                createdBy: rov.created_by || "system",
+                createdAt: rov.created_at ? new Date(rov.created_at).getTime() : Date.now(),
+                updatedAt: rov.updated_at ? new Date(rov.updated_at).getTime() : Date.now(),
+                sync_status: "synced" as const,
+              }));
+            }
           }
         } catch (remoteErr) {
-          console.warn("[useAuthorization] Supabase override fallback failed:", remoteErr);
+          console.warn("[useAuthorization] Supabase override query failed:", remoteErr);
         }
       }
 

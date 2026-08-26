@@ -77,14 +77,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         let fetchedRoles = ((rolesRes.data ?? []) as { role: AppRole }[]).map((r) => r.role);
         
-        // Sanity check: If user_metadata or local staff record explicitly defines role as "staff" or "manager",
+        // Sanity check: If user_metadata or staff record defines role as "staff" or "manager",
         // prevent unwanted "admin" role resolution from orphaned user_roles records
         const metaRole = session?.user?.user_metadata?.role as AppRole | undefined;
-        const staffRecord =
+        let staffRecord =
           (await staffRepository.getByAuthUserId(userId)) ||
           (session?.user?.email ? await staffRepository.getByEmail(session.user.email) : undefined);
 
-        if (metaRole === "staff" || metaRole === "manager" || staffRecord?.role === "staff" || staffRecord?.role === "sales_staff") {
+        if (!staffRecord && typeof navigator !== "undefined" && navigator.onLine) {
+          try {
+            const { data: remoteStaff } = await (supabase as any)
+              .from("staff")
+              .select("role")
+              .or(`auth_user_id.eq.${userId},email.eq.${session?.user?.email || ""}`)
+              .maybeSingle();
+            if (remoteStaff) {
+              staffRecord = { role: remoteStaff.role } as any;
+            }
+          } catch {
+            // ignore network err
+          }
+        }
+
+        const isExplicitStaff =
+          metaRole === "staff" ||
+          metaRole === "manager" ||
+          staffRecord?.role === "staff" ||
+          staffRecord?.role === "sales_staff" ||
+          staffRecord?.role === "inventory_staff" ||
+          staffRecord?.role === "role-sales-staff" ||
+          staffRecord?.role === "role-inventory-staff";
+
+        if (isExplicitStaff) {
           fetchedRoles = [metaRole === "manager" ? "manager" : "staff"];
         } else if (fetchedRoles.length === 0) {
           if (metaRole) {
