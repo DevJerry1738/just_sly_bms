@@ -14,6 +14,18 @@ CREATE TABLE IF NOT EXISTS public.user_permission_overrides (
     CONSTRAINT uq_user_permission_override UNIQUE (organization_id, user_id, permission_id)
 );
 
+-- Maintain canonical auth-user-based identity across browsers and staff records.
+CREATE INDEX IF NOT EXISTS idx_user_permission_overrides_user_permission
+    ON public.user_permission_overrides (user_id, permission_id);
+
+-- Backfill any legacy rows created from a staff UUID so all browsers read the same auth identity.
+UPDATE public.user_permission_overrides o
+SET user_id = s.auth_user_id::text
+FROM public.staff s
+WHERE s.id = o.user_id
+  AND s.auth_user_id IS NOT NULL
+  AND o.user_id <> s.auth_user_id::text;
+
 -- Indexes for optimal multi-tenant and user permission resolution queries
 CREATE INDEX IF NOT EXISTS idx_user_permission_overrides_org_user 
     ON public.user_permission_overrides (organization_id, user_id);
@@ -25,6 +37,15 @@ CREATE INDEX IF NOT EXISTS idx_user_permission_overrides_user_perm
 ALTER TABLE public.user_permission_overrides ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies with Multi-Tenant Isolation
+DROP POLICY IF EXISTS "Users can view permission overrides for their organization"
+    ON public.user_permission_overrides;
+DROP POLICY IF EXISTS "Admins can insert permission overrides in their organization"
+    ON public.user_permission_overrides;
+DROP POLICY IF EXISTS "Admins can update permission overrides in their organization"
+    ON public.user_permission_overrides;
+DROP POLICY IF EXISTS "Admins can delete permission overrides in their organization"
+    ON public.user_permission_overrides;
+
 CREATE POLICY "Users can view permission overrides for their organization"
     ON public.user_permission_overrides FOR SELECT
     USING (auth.uid() IS NOT NULL);

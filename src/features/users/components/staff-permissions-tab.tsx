@@ -310,12 +310,13 @@ export function StaffPermissionsTab({ staff, role, onUpdated }: StaffPermissions
     setIsSaving(true);
     try {
       const additionalUserIds = [staff.authUserId, staff.email].filter(Boolean) as string[];
+      const canonicalUserId = staff.authUserId ?? staff.id;
       if (changeTarget.targetEffect === "INHERITED") {
-        await userPermissionOverrideRepository.removeOverride(staff.id, changeTarget.permission, currentUser?.id, additionalUserIds);
+        await userPermissionOverrideRepository.removeOverride(canonicalUserId, changeTarget.permission, currentUser?.id, additionalUserIds);
         toast.success(`Reset "${changeTarget.label}" to role inheritance.`);
       } else {
         await userPermissionOverrideRepository.setOverride(
-          staff.id,
+          canonicalUserId,
           changeTarget.permission,
           changeTarget.targetEffect,
           reason,
@@ -344,8 +345,9 @@ export function StaffPermissionsTab({ staff, role, onUpdated }: StaffPermissions
     if (!staff.id) return;
     setIsSaving(true);
     try {
+      const canonicalUserId = staff.authUserId ?? staff.id;
       const additionalUserIds = [staff.authUserId, staff.email].filter(Boolean) as string[];
-      const count = await userPermissionOverrideRepository.resetUserOverrides(staff.id, currentUser?.id, additionalUserIds);
+      const count = await userPermissionOverrideRepository.resetUserOverrides(canonicalUserId, currentUser?.id, additionalUserIds);
       toast.success(`Cleared ${count} custom permission overrides for ${staff.firstName} ${staff.lastName}.`);
       await loadData();
       if (currentUser?.id === staff.id) {
@@ -365,6 +367,7 @@ export function StaffPermissionsTab({ staff, role, onUpdated }: StaffPermissions
     if (!bulkTarget || !staff.id) return;
     setIsSaving(true);
     try {
+      const canonicalUserId = staff.authUserId ?? staff.id;
       const additionalUserIds = [staff.authUserId, staff.email].filter(Boolean) as string[];
       const catRows = ALL_PERMISSIONS_CATALOG.filter((p) => p.category === bulkTarget.category);
       let updatedCount = 0;
@@ -376,13 +379,13 @@ export function StaffPermissionsTab({ staff, role, onUpdated }: StaffPermissions
         if (bulkTarget.action === "grant_all") {
           // Delegation safeguard
           if (!isSuperAdmin && !currentHasPermission(row.permission)) continue;
-          await userPermissionOverrideRepository.setOverride(staff.id, row.permission, "GRANT", "Bulk grant by module", currentUser?.id, "org-default", additionalUserIds);
+          await userPermissionOverrideRepository.setOverride(canonicalUserId, row.permission, "GRANT", "Bulk grant by module", currentUser?.id, "org-default", additionalUserIds);
           updatedCount++;
         } else if (bulkTarget.action === "revoke_all") {
-          await userPermissionOverrideRepository.setOverride(staff.id, row.permission, "DENY", "Bulk revoke by module", currentUser?.id, "org-default", additionalUserIds);
+          await userPermissionOverrideRepository.setOverride(canonicalUserId, row.permission, "DENY", "Bulk revoke by module", currentUser?.id, "org-default", additionalUserIds);
           updatedCount++;
         } else if (bulkTarget.action === "reset") {
-          await userPermissionOverrideRepository.removeOverride(staff.id, row.permission, currentUser?.id, additionalUserIds);
+          await userPermissionOverrideRepository.removeOverride(canonicalUserId, row.permission, currentUser?.id, additionalUserIds);
           updatedCount++;
         }
       }
