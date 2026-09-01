@@ -129,3 +129,44 @@ export function StockStatusComponent() {
 
 - **Authentication Tokens**: Stored exclusively in Supabase Auth session storage / secure cookies. **Never** saved in IndexedDB or Service Worker caches.
 - **Sensitive Fields**: If a payload contains sensitive data, encrypt before enqueuing via custom transformer functions before writing to IndexedDB.
+
+---
+
+## Permission Override Sync Contract
+
+Permission overrides use the following persistence contract:
+
+1. Supabase `public.user_permission_overrides` is the cross-browser source of truth.
+2. IndexedDB database `JustSlySuiteDB` is a local cache and durable mutation queue.
+3. `user_id` is stored canonically as the authenticated Supabase user ID, represented as text to match the table schema.
+4. Legacy staff IDs and emails may be accepted as lookup aliases, but they must not be written as the canonical remote identity.
+5. `user_permission_overrides` must have a registered `SyncManager` handler before queue processing begins.
+
+### Queue Status Meaning
+
+- `pending`: waiting to be uploaded
+- `syncing`: currently being uploaded
+- `failed`: upload did not complete; inspect `errorMessage` before retrying
+- removed: upload completed successfully
+
+A local modal or POS restriction can work while a record is still only in IndexedDB. That is not proof of cross-browser persistence. Confirm the corresponding Supabase row before clearing local storage or declaring synchronization complete.
+
+### Production Recovery Order
+
+1. Preserve failed permission payloads in `JustSlySuiteDB.syncQueue`.
+2. Deploy a bundle containing `entity-sync-handlers` and the targeted permission recovery logic.
+3. Refresh service-worker assets only if the browser is serving an old bundle.
+4. Retry only failed `user_permission_overrides` records with the known missing-handler error.
+5. Confirm the row in Supabase.
+6. Clear IndexedDB only after remote persistence is confirmed and a clean rehydration is required.
+
+Never bulk-requeue a large unrelated queue backlog as part of permission recovery. Never delete `JustSlySuiteDB` before preserving unsynchronized permission payloads.
+
+### Browser Inspection
+
+Use DevTools -> **Application -> IndexedDB -> JustSlySuiteDB** and inspect:
+
+- `user_permission_overrides`: local permission records
+- `syncQueue`: pending or failed mutations
+
+The console database name is `JustSlySuiteDB`, not `justsly-db`. A successful end-to-end test requires the same canonical `userId` in both browsers and one matching row in Supabase.

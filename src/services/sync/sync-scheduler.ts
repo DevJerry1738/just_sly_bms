@@ -727,11 +727,12 @@ export class SyncScheduler {
   static async triggerSync(): Promise<void> {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
-    await this.catchUpExistingLocalData();
     await SyncQueueService.requeueFailedForEntity(
       "user_permission_overrides",
       "No sync handler registered",
     );
+    await SyncManager.processQueue(["user_permission_overrides"]);
+    await this.catchUpExistingLocalData();
     await SyncManager.processQueue();
     await this.pullSync();
   }

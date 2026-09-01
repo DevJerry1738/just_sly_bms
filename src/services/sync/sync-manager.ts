@@ -26,9 +26,9 @@ export class SyncManager {
   }
 
   /**
-   * Process all pending items in the SyncQueue.
+   * Process pending items in the SyncQueue, optionally limited to entity types.
    */
-  static async processQueue(): Promise<SyncResult> {
+  static async processQueue(entityTypes?: string[]): Promise<SyncResult> {
     if (this.isSyncing) {
       return { success: true, syncedCount: 0, failedCount: 0 };
     }
@@ -45,7 +45,10 @@ export class SyncManager {
     const errors: Array<{ itemId: string; error: string }> = [];
 
     try {
-      const items = await SyncQueueService.getPendingItems();
+      const pendingItems = await SyncQueueService.getPendingItems();
+      const items = entityTypes?.length
+        ? pendingItems.filter((item) => entityTypes.includes(item.entityType))
+        : pendingItems;
 
       for (const item of items) {
         const handler = this.handlers.get(item.entityType);

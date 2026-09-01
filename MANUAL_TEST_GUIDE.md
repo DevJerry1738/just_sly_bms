@@ -98,3 +98,50 @@ All features in Sprint 1 strictly adhere to:
 - **Repository Pattern**: `OrganizationRepository` extending `BaseRepository<OrganizationSchema>`.
 - **Offline-First Infrastructure**: Local IndexedDB reads/writes with background `SyncQueue` mutations.
 - **Design Tokens**: Standard typography (`Inter`), semantic OKLCH color variables, and Shadcn UI primitives.
+
+---
+
+## Test Suite 3: Cross-Browser Staff Permission Synchronization
+
+### Test Case 3.1: Remote Permission Persistence
+- **Objective**: Verify a permission override is persisted in Supabase and displayed consistently across browsers.
+- **Prerequisites**: Deploy the current build. Use two separate browsers and an admin account that can manage staff permissions.
+- **Steps**:
+  1. Open DevTools -> **Application -> IndexedDB -> JustSlySuiteDB** in both browsers.
+  2. In Browser A, log in as an admin and open **Staff -> Jane Doe -> Individual Permissions**.
+  3. Set **Point of Sale (POS)** to **Denied** and confirm the change.
+  4. Verify the modal shows one explicit deny and the staff table shows one custom override.
+  5. Inspect the `syncQueue` store and confirm a `user_permission_overrides` `UPSERT` is pending briefly and then removed after successful synchronization.
+  6. In Supabase SQL Editor, run:
+     ```sql
+     SELECT user_id, permission_id, effect, updated_at
+     FROM public.user_permission_overrides
+     ORDER BY updated_at DESC;
+     ```
+  7. Verify exactly one canonical row exists for the affected staff member, with the expected POS permission and `DENY` effect.
+  8. In Browser B, hard refresh and open `/users`.
+  9. Verify the staff table shows one custom override and the modal shows the same denied POS permission.
+  10. Log in as the affected staff user in both browsers and verify POS is inaccessible.
+- **Expected Result**: The table, modal, Supabase, and both staff sessions show the same restriction.
+
+### Test Case 3.2: Recovery of a Failed Permission Queue Item
+- **Objective**: Verify a permission item created by an older deployment can be recovered without retrying unrelated queue failures.
+- **Steps**:
+  1. Deploy the current build before clearing browser storage.
+  2. Hard refresh both browsers so the current sync handler bundle is loaded.
+  3. Open the `JustSlySuiteDB` `syncQueue` store and record failed `user_permission_overrides` payloads.
+  4. Visit `/users` or use the application sync control to trigger synchronization.
+  5. Confirm the permission item is no longer failed and is removed after a successful upload.
+  6. Confirm unrelated failed queue records were not automatically requeued by this recovery.
+  7. Verify the corresponding Supabase row.
+- **Expected Result**: Only permission overrides with the known missing-handler error are retried; successful records are removed from the queue.
+
+### Test Case 3.3: Safe Browser Cache Reset
+- **Objective**: Rehydrate a browser from the remote source after successful permission recovery.
+- **Steps**:
+  1. Capture or successfully upload all permission queue payloads first.
+  2. Unregister the service worker and clear Cache Storage only if an old deployment is still served.
+  3. Reload the application.
+  4. Use `await indexedDB.deleteDatabase("JustSlySuiteDB")` only after the remote row is confirmed in Supabase.
+  5. Log in again and repeat Test Case 3.1.
+- **Expected Result**: The restriction is rehydrated from Supabase and remains identical across browsers.
