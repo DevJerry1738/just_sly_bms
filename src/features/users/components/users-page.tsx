@@ -53,8 +53,18 @@ export function UsersPage() {
       ]);
 
       const counts: Record<string, number> = {};
-      for (const ov of allOverrides) {
-        counts[ov.userId] = (counts[ov.userId] || 0) + 1;
+      for (const member of staffList) {
+        const aliases = new Set(
+          [member.id, member.authUserId, member.email?.toLowerCase()]
+            .filter(Boolean)
+            .map((value) => String(value).toLowerCase()),
+        );
+        const permissionIds = new Set(
+          allOverrides
+            .filter((override) => aliases.has(override.userId.toLowerCase()))
+            .map((override) => override.permissionId),
+        );
+        counts[member.id] = permissionIds.size;
       }
       setOverrideMap(counts);
 

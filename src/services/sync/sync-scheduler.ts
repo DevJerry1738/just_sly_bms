@@ -728,6 +728,10 @@ export class SyncScheduler {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     await this.catchUpExistingLocalData();
+    await SyncQueueService.requeueFailedForEntity(
+      "user_permission_overrides",
+      "No sync handler registered",
+    );
     await SyncManager.processQueue();
     await this.pullSync();
   }

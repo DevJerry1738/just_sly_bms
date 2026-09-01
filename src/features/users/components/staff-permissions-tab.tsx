@@ -34,6 +34,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { userPermissionOverrideRepository } from "@/repositories/user-permission-override.repository";
 import { roleRepository } from "@/repositories/role.repository";
+import { SyncScheduler } from "@/services/sync/sync-scheduler";
 import { useAuth } from "@/providers/auth-provider";
 import { useAuthorization } from "@/hooks/use-authorization";
 import type { StaffSchema, RoleSchema, UserPermissionOverrideSchema } from "@/database/schema";
@@ -325,6 +326,10 @@ export function StaffPermissionsTab({ staff, role, onUpdated }: StaffPermissions
           additionalUserIds
         );
         toast.success(`Updated "${changeTarget.label}" to ${changeTarget.targetEffect}.`);
+      }
+
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        await SyncScheduler.triggerSync();
       }
 
       await loadData();

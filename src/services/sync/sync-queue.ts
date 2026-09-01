@@ -98,4 +98,27 @@ export class SyncQueueService {
     }
     return failed.length;
   }
+
+  /** Requeue only failed records for one entity, optionally matching a known error. */
+  static async requeueFailedForEntity(
+    entityType: string,
+    errorIncludes?: string,
+  ): Promise<number> {
+    const failed = await db.syncQueue
+      .where("status")
+      .equals("failed")
+      .filter((item) =>
+        item.entityType === entityType &&
+        (!errorIncludes || item.errorMessage?.includes(errorIncludes)),
+      )
+      .toArray();
+
+    for (const item of failed) {
+      await db.syncQueue.update(item.id, {
+        status: "pending",
+        errorMessage: undefined,
+      });
+    }
+    return failed.length;
+  }
 }
