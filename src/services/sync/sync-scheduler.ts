@@ -735,7 +735,11 @@ export class SyncScheduler {
       "user_permission_overrides",
       "No sync handler registered",
     );
-    await SyncManager.processQueue(["sale_items", "user_permission_overrides"]);
+    await SyncQueueService.requeueFailedForEntity(
+      "audit_logs",
+      "No sync handler registered",
+    );
+    await SyncManager.processQueue(["sale_items", "user_permission_overrides", "audit_logs"]);
     await this.catchUpExistingLocalData();
     await SyncManager.processQueue();
     await this.pullSync();

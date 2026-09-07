@@ -616,7 +616,46 @@ SyncManager.registerHandler("stock_count_items", async (operationType, payload) 
   return { success: !error, error: error?.message };
 });
 
-// 12. User Permission Overrides Handler
+// 12. Audit Logs Handler
+SyncManager.registerHandler("audit_logs", async (operationType, payload) => {
+  const id = payload["id"] as string;
+
+  if (operationType === "DELETE") {
+    const { error } = await client.from("audit_logs").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+
+  const { error } = await client.from("audit_logs").upsert({
+    id,
+    user_id: toCleanUuidOrNull(payload["userId"]),
+    branch_id: toCleanStringOrNull(payload["branchId"]),
+    entity: payload["entity"],
+    entity_id: payload["entityId"],
+    action: payload["action"],
+    details: {
+      userName: payload["userName"],
+      module: payload["module"],
+      description: payload["description"],
+      before: payload["before"],
+      after: payload["after"],
+      metadata: payload["metadata"],
+      ipAddress: payload["ipAddress"],
+      device: payload["device"],
+    },
+    timestamp: new Date(Number(payload["timestamp"] || Date.now())).toISOString(),
+    synced: true,
+  }, { onConflict: "id" });
+
+  if (!error) {
+    await db.audit_logs.update(id, { synced: true });
+  } else {
+    console.error("[Sync] Audit logs upsert error:", error.message);
+  }
+
+  return { success: !error, error: error?.message };
+});
+
+// 13. User Permission Overrides Handler
 SyncManager.registerHandler("user_permission_overrides", async (operationType, payload) => {
   if (operationType === "DELETE") {
     const id = payload["id"] as string;
