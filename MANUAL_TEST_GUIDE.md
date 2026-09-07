@@ -145,3 +145,73 @@ All features in Sprint 1 strictly adhere to:
   4. Use `await indexedDB.deleteDatabase("JustSlySuiteDB")` only after the remote row is confirmed in Supabase.
   5. Log in again and repeat Test Case 3.1.
 - **Expected Result**: The restriction is rehydrated from Supabase and remains identical across browsers.
+
+---
+
+## End-to-End Production Validation: Sales + Permission Sync Recovery
+
+### Test Case 4.1: Confirm stale runtime is cleared and the queue is retried
+- **Objective**: Verify the browser is no longer serving a stale client bundle and the sync queue can recover after deployment.
+- **Steps**:
+  1. Deploy the latest build and reload the app in a fresh browser session.
+  2. Open DevTools → Application → IndexedDB → JustSlySuiteDB → syncQueue.
+  3. Confirm the stale-data banner is no longer present.
+  4. If a `sale_items` or `user_permission_overrides` item is still failed with "No sync handler registered", trigger a manual sync from the UI or reload the page while online.
+  5. Observe the queue status change from `failed` to `pending` and then disappear after successful upload.
+- **Expected Result**: The stale-runtime queue entries recover cleanly and the browser is no longer stuck with the old bundle.
+
+### Test Case 4.2: Verify sales sync end-to-end across two PCs
+- **Objective**: Confirm a sale created on one machine appears in Supabase and in a second browser session.
+- **Steps**:
+  1. On PC A, log in as an admin and complete a POS sale.
+  2. Wait for the queue item to clear or trigger manual sync.
+  3. In Supabase SQL editor, run:
+     ```sql
+     SELECT *
+     FROM public.sales_normalized
+     ORDER BY created_at DESC;
+     ```
+  4. Also check:
+     ```sql
+     SELECT *
+     FROM public.sale_items
+     ORDER BY created_at DESC;
+     ```
+  5. On PC B, log in as the same admin and open `/sales`.
+  6. Refresh the page and confirm the sale appears.
+- **Expected Result**: The sale and sale items are present in Supabase and visible on both machines.
+
+### Test Case 4.3: Verify permission override sync end-to-end across two PCs
+- **Objective**: Confirm a staff permission override is pushed to Supabase and visible by a fresh browser.
+- **Steps**:
+  1. On PC A, log in as admin and change one permission for a staff user.
+  2. Wait for the queue item to clear or trigger sync.
+  3. In Supabase SQL editor, run:
+     ```sql
+     SELECT user_id, permission_id, effect, updated_at
+     FROM public.user_permission_overrides
+     ORDER BY updated_at DESC;
+     ```
+  4. On PC B, log in as the same admin and open `/users`.
+  5. Verify the custom override badge and permission restriction match the same user state.
+- **Expected Result**: The override is present in Supabase and matches across browsers.
+
+### Test Case 4.4: Safe reset after successful recovery
+- **Objective**: Clear stale local browser state without losing the source-of-truth records.
+- **Steps**:
+  1. Confirm the remote Supabase rows exist for both sales and permission overrides.
+  2. Only then clear IndexedDB if a browser is still stale.
+  3. Log in again and confirm the app rehydrates from Supabase, not from stale local cache.
+- **Expected Result**: Local browser cache is rebuilt cleanly from Supabase and remains in sync.
+
+---
+
+## Final success criteria
+
+The fix is complete only when all of the following are true:
+- the stale-data banner is no longer active after a valid deployment
+- no `sale_items` queue entries fail with "No sync handler registered"
+- new sales appear in Supabase within the same session
+- permission overrides appear in `public.user_permission_overrides`
+- a fresh browser sees the same sales and restriction state as the original admin browser
+- the queue is empty or only contains genuine non-failing items after successful sync

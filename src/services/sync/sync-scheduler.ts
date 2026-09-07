@@ -728,10 +728,14 @@ export class SyncScheduler {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     await SyncQueueService.requeueFailedForEntity(
+      "sale_items",
+      "No sync handler registered",
+    );
+    await SyncQueueService.requeueFailedForEntity(
       "user_permission_overrides",
       "No sync handler registered",
     );
-    await SyncManager.processQueue(["user_permission_overrides"]);
+    await SyncManager.processQueue(["sale_items", "user_permission_overrides"]);
     await this.catchUpExistingLocalData();
     await SyncManager.processQueue();
     await this.pullSync();

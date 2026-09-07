@@ -3,7 +3,7 @@
  * Enterprise Offline-First PWA Caching & Navigation Fallback Shell
  */
 
-const CACHE_NAME = "just-sly-suite-v2";
+const CACHE_NAME = "just-sly-suite-v3";
 
 // Static core assets to pre-cache on SW installation
 const CORE_ASSETS = [
@@ -48,6 +48,12 @@ self.addEventListener("activate", (event) => {
 });
 
 // 3. Fetch Event — Intelligent caching strategy
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
