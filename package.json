@@ -1,7 +1,10 @@
 {
   "name": "tanstack_start_ts",
   "private": true,
-  "sideEffects": false,
+  "sideEffects": [
+    "src/services/sync/entity-sync-handlers.ts",
+    "src/services/sync/user-profile-sync.ts"
+  ],
   "type": "module",
   "scripts": {
     "dev": "vite dev",

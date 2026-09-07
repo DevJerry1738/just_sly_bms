@@ -3,7 +3,7 @@
  * Enterprise Offline-First PWA Caching & Navigation Fallback Shell
  */
 
-const CACHE_NAME = "just-sly-suite-v3";
+const CACHE_NAME = "just-sly-suite-v4";
 
 // Static core assets to pre-cache on SW installation
 const CORE_ASSETS = [
