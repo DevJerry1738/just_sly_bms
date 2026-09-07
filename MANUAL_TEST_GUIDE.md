@@ -17,7 +17,7 @@ This document outlines the step-by-step procedures for manually testing and veri
 ### Test Case 1.1: Online Login & Route Protection
 - **Objective**: Verify authenticated routes redirect unauthenticated users to `/auth`.
 - **Steps**:
-  1. Open a new Incognito browser window.
+  1. Open a new Incognito browser window.v
   2. Navigate directly to `http://localhost:3000/settings` or `http://localhost:3000/`.
   3. Verify automatic redirect to `/auth`.
   4. Enter valid user credentials and click **Sign in**.

@@ -354,6 +354,11 @@ export function StaffPermissionsTab({ staff, role, onUpdated }: StaffPermissions
       const additionalUserIds = [staff.authUserId, staff.email].filter(Boolean) as string[];
       const count = await userPermissionOverrideRepository.resetUserOverrides(canonicalUserId, currentUser?.id, additionalUserIds);
       toast.success(`Cleared ${count} custom permission overrides for ${staff.firstName} ${staff.lastName}.`);
+
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        await SyncScheduler.triggerSync();
+      }
+
       await loadData();
       if (currentUser?.id === staff.id) {
         await refreshCurrentAuth();
@@ -396,6 +401,11 @@ export function StaffPermissionsTab({ staff, role, onUpdated }: StaffPermissions
       }
 
       toast.success(`Updated ${updatedCount} permissions in ${CATEGORY_LABELS[bulkTarget.category] || bulkTarget.category}.`);
+
+      if (typeof navigator === "undefined" || navigator.onLine) {
+        await SyncScheduler.triggerSync();
+      }
+
       await loadData();
       if (currentUser?.id === staff.id) {
         await refreshCurrentAuth();
