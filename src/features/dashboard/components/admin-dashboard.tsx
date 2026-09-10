@@ -267,14 +267,14 @@ export function AdminDashboard() {
         description="Here's what's happening across Just Sly today."
         actions={
           <div className="flex items-center gap-2">
-            <Select value={timeRange} onValueChange={(v) => setTimeRange(v as "today" | "7d" | "30d")}>
+            <Select value={chartDays.toString()} onValueChange={(v) => setChartDays(Number(v) as 7 | 30 | 90)}>
               <SelectTrigger className="h-8 text-xs font-medium w-28">
                 <SelectValue placeholder="Timeframe" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="today">Today</SelectItem>
-                <SelectItem value="7d">Last 7 Days</SelectItem>
-                <SelectItem value="30d">Last 30 Days</SelectItem>
+                <SelectItem value="7">Last 7 Days</SelectItem>
+                <SelectItem value="30">Last 30 Days</SelectItem>
+                <SelectItem value="90">Last 90 Days</SelectItem>
               </SelectContent>
             </Select>
 
