@@ -21,8 +21,22 @@ import {
   ChevronRight,
   ShieldCheck,
   CheckCircle2,
+  BarChart3,
+  DollarSign,
+  Percent,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 import { useAuth } from "@/providers/auth-provider";
 import { useBranch } from "@/providers/branch-provider";
@@ -30,6 +44,7 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import { db, type SalesSchema, type WholesaleOrderSchema, type AuditLogSchema, type BranchSchema, type InventoryBalanceSchema, type ProductSchema } from "@/database/schema";
 import { branchRepository } from "@/repositories/branch.repository";
 import { auditLogRepository } from "@/repositories/audit-log.repository";
+import { reportService, type TimeSeriesPoint } from "@/services/reports/report.service";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/common/stat-card";
 import { Button } from "@/components/ui/button";
@@ -56,8 +71,9 @@ export function AdminDashboard() {
   const { hasPermission } = useAuthorization();
 
   const [loading, setLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState<"today" | "7d" | "30d">("today");
-  const [chartMetric, setChartMetric] = useState<"revenue" | "sales" | "retail" | "wholesale">("revenue");
+  const [chartDays, setChartDays] = useState<7 | 30 | 90>(7);
+  const [chartMetric, setChartMetric] = useState<"revenue" | "retail" | "wholesale" | "profit">("revenue");
+  const [chartType, setChartType] = useState<"area" | "bar">("area");
 
   // Metrics State
   const [todayRevenue, setTodayRevenue] = useState(0);
@@ -73,12 +89,16 @@ export function AdminDashboard() {
   const [totalStockUnits, setTotalStockUnits] = useState(0);
   const [expiringSoonCount, setExpiringSoonCount] = useState(0);
 
+  // Profitability and Period Totals
+  const [periodGrossProfit, setPeriodGrossProfit] = useState(0);
+  const [periodGrossMargin, setPeriodGrossMargin] = useState(0);
+
   // Lists & Analytics Data
   const [branchPerformance, setBranchPerformance] = useState<BranchMetrics[]>([]);
-  const [bestSellers, setBestSellers] = useState<{ id: string; name: string; sku: string; unitsSold: number; revenue: number }[]>([]);
+  const [bestSellers, setBestSellers] = useState<{ id: string; name: string; sku: string; unitsSold: number; revenue: number; profit: number }[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<{ category: string; count: number; units: number }[]>([]);
   const [recentActivities, setRecentActivities] = useState<AuditLogSchema[]>([]);
-  const [salesChartData, setSalesChartData] = useState<{ label: string; retail: number; wholesale: number; total: number }[]>([]);
+  const [salesChartData, setSalesChartData] = useState<TimeSeriesPoint[]>([]);
 
   const firstName = user?.email?.split("@")[0] ?? "Admin";
 
@@ -180,29 +200,26 @@ export function AdminDashboard() {
       });
       setBranchPerformance(branchStats);
 
-      // 6. Best Sellers Calculation
-      const saleItems = await db.sale_items.toArray();
-      const productSalesMap = new Map<string, { name: string; sku: string; unitsSold: number; revenue: number }>();
-
-      saleItems.forEach((item) => {
-        const prod = allProducts.find((p) => p.id === item.productId);
-        const skuStr = prod?.sku || item.productId.slice(0, 8);
-        const existing = productSalesMap.get(item.productId) || {
-          name: item.productName,
-          sku: skuStr,
-          unitsSold: 0,
-          revenue: 0,
-        };
-        existing.unitsSold += item.quantity;
-        existing.revenue += item.subtotal;
-        productSalesMap.set(item.productId, existing);
+      // 6. Report Service Analytics (Profitability, Chart Time Series, Best Sellers)
+      const salesAnalytics = await reportService.getSalesAnalytics({
+        branchId,
+        daysCount: chartDays,
       });
 
-      const sortedSellers = Array.from(productSalesMap.entries())
-        .map(([id, val]) => ({ id, ...val }))
-        .sort((a, b) => b.unitsSold - a.unitsSold)
-        .slice(0, 5);
-      setBestSellers(sortedSellers);
+      setPeriodGrossProfit(salesAnalytics.grossProfit);
+      setPeriodGrossMargin(salesAnalytics.grossMarginPercent);
+      setSalesChartData(salesAnalytics.timeSeries);
+
+      // Best sellers mapped with profit
+      const sellers = salesAnalytics.topProducts.slice(0, 5).map((p) => ({
+        id: p.productId,
+        name: p.productName,
+        sku: p.sku,
+        unitsSold: p.quantitySold,
+        revenue: p.revenue,
+        profit: p.profit,
+      }));
+      setBestSellers(sellers);
 
       // 7. Inventory by Category
       const catMap = new Map<string, { category: string; count: number; units: number }>();
@@ -221,36 +238,13 @@ export function AdminDashboard() {
 
       // 8. Recent Domain Activities
       setRecentActivities(allAuditLogs.slice(0, 6));
-
-      // 9. Chart Trend Data (Last 7 Days)
-      const chartPoints = Array.from({ length: 7 }).map((_, idx) => {
-        const d = subDays(now, 6 - idx);
-        const dayStart = startOfDay(d).getTime();
-        const dayEnd = endOfDay(d).getTime();
-
-        const dayRetail = sales
-          .filter((s) => s.createdAt >= dayStart && s.createdAt <= dayEnd && s.status === "completed")
-          .reduce((sum, s) => sum + s.totalAmount, 0);
-
-        const dayWholesale = wholesale
-          .filter((w) => w.createdAt >= dayStart && w.createdAt <= dayEnd && w.paymentStatus === "confirmed")
-          .reduce((sum, w) => sum + w.totalAmount, 0);
-
-        return {
-          label: format(d, "EEE dd"),
-          retail: dayRetail,
-          wholesale: dayWholesale,
-          total: dayRetail + dayWholesale,
-        };
-      });
-      setSalesChartData(chartPoints);
     } catch (err) {
       console.error("[AdminDashboard] Failed to load dashboard data:", err);
       toast.error("Failed to refresh dashboard metrics");
     } finally {
       setLoading(false);
     }
-  }, [activeBranch?.id, branches]);
+  }, [activeBranch?.id, branches, chartDays]);
 
   useEffect(() => {
     loadDashboardData();
@@ -336,77 +330,359 @@ export function AdminDashboard() {
       {/* Main Grid: Sales Chart & Attention Required */}
       <div className="grid gap-6 lg:grid-cols-12">
         {/* Sales Performance Chart */}
-        <Card variant="flat" className="lg:col-span-8 border">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <div>
-              <CardTitle className="text-base font-semibold">Sales Performance Trend</CardTitle>
-              <CardDescription className="text-xs">Retail POS & Wholesale revenue velocity over the last 7 days.</CardDescription>
+        <Card variant="flat" className="lg:col-span-8 border shadow-xs overflow-hidden">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b bg-muted/20">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-base font-semibold">Sales Performance Trend</CardTitle>
+                <Badge variant="outline" className="text-[11px] font-normal border-primary/20 text-primary bg-primary/5">
+                  {chartDays} Days View
+                </Badge>
+              </div>
+              <CardDescription className="text-xs">
+                Real-time POS revenue velocity, wholesale orders, and gross profit margins.
+              </CardDescription>
             </div>
-            <div className="flex items-center gap-1.5 bg-muted p-1 rounded-lg">
-              <Button
-                variant={chartMetric === "revenue" ? "default" : "ghost"}
-                size="sm"
-                className="h-6 text-[10px] px-2"
-                onClick={() => setChartMetric("revenue")}
-              >
-                Revenue
-              </Button>
-              <Button
-                variant={chartMetric === "retail" ? "default" : "ghost"}
-                size="sm"
-                className="h-6 text-[10px] px-2"
-                onClick={() => setChartMetric("retail")}
-              >
-                Retail
-              </Button>
-              <Button
-                variant={chartMetric === "wholesale" ? "default" : "ghost"}
-                size="sm"
-                className="h-6 text-[10px] px-2"
-                onClick={() => setChartMetric("wholesale")}
-              >
-                Wholesale
-              </Button>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+              {/* Time Horizon Selector */}
+              <div className="flex items-center bg-muted/80 p-0.5 rounded-lg border text-xs">
+                {([7, 30, 90] as const).map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    onClick={() => setChartDays(days)}
+                    className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                      chartDays === days
+                        ? "bg-background text-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {days}D
+                  </button>
+                ))}
+              </div>
+
+              {/* Metric Type Selector */}
+              <div className="flex items-center bg-muted/80 p-0.5 rounded-lg border text-xs">
+                <button
+                  type="button"
+                  onClick={() => setChartMetric("revenue")}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    chartMetric === "revenue"
+                      ? "bg-background text-primary shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Combined
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMetric("retail")}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    chartMetric === "retail"
+                      ? "bg-background text-emerald-600 shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Retail
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMetric("wholesale")}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    chartMetric === "wholesale"
+                      ? "bg-background text-blue-600 shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Wholesale
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartMetric("profit")}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium transition-all ${
+                    chartMetric === "profit"
+                      ? "bg-background text-purple-600 shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Profit
+                </button>
+              </div>
+
+              {/* Chart Style Toggle (Area / Bar) */}
+              <div className="hidden sm:flex items-center bg-muted/80 p-0.5 rounded-lg border text-xs">
+                <button
+                  type="button"
+                  onClick={() => setChartType("area")}
+                  className={`p-1 rounded-md text-[11px] transition-all ${
+                    chartType === "area" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                  }`}
+                  title="Smooth Curve Area Chart"
+                >
+                  <TrendingUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChartType("bar")}
+                  className={`p-1 rounded-md text-[11px] transition-all ${
+                    chartType === "bar" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground"
+                  }`}
+                  title="Column Bar Chart"
+                >
+                  <BarChart3 className="size-3.5" />
+                </button>
+              </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-4">
-            <div className="space-y-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold tracking-tight">₦{salesChartData.reduce((sum, d) => sum + d.total, 0).toLocaleString()}</span>
-                <span className="text-xs text-muted-foreground">Total 7-Day Revenue</span>
-              </div>
-
-              {/* Bar visualization */}
-              <div className="h-44 flex items-end justify-between gap-2 pt-6 border-b pb-2">
-                {salesChartData.map((d, i) => {
-                  const maxTotal = Math.max(...salesChartData.map((p) => p.total), 1);
-                  const val = chartMetric === "retail" ? d.retail : chartMetric === "wholesale" ? d.wholesale : d.total;
-                  const heightPct = Math.max((val / maxTotal) * 100, 8);
-
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                      <div className="text-[10px] font-mono font-medium text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                        ₦{(val / 1000).toFixed(0)}k
-                      </div>
-                      <div
-                        className="w-full max-w-[36px] bg-primary/80 group-hover:bg-primary rounded-t transition-all"
-                        style={{ height: `${heightPct}%` }}
-                      />
-                      <span className="text-[10px] text-muted-foreground font-mono">{d.label}</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-primary" /> Retail Sales</span>
-                  <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-primary/40" /> Wholesale Orders</span>
+          <CardContent className="pt-4 space-y-4">
+            {/* KPI Ribbon over Chart */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-muted/30 border rounded-xl">
+              <div>
+                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Total {chartDays}D Revenue
+                </span>
+                <div className="text-lg sm:text-xl font-bold tracking-tight text-foreground mt-0.5">
+                  ₦{salesChartData.reduce((sum, d) => sum + d.totalRevenue, 0).toLocaleString()}
                 </div>
-                <Link to="/analytics" className="text-xs text-primary font-medium flex items-center hover:underline">
-                  Full Analytics <ChevronRight className="size-3 ml-0.5" />
-                </Link>
               </div>
+
+              <div>
+                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-emerald-500 inline-block" /> Retail POS
+                </span>
+                <div className="text-lg sm:text-xl font-bold tracking-tight text-foreground mt-0.5">
+                  ₦{salesChartData.reduce((sum, d) => sum + d.retailRevenue, 0).toLocaleString()}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-blue-500 inline-block" /> Wholesale
+                </span>
+                <div className="text-lg sm:text-xl font-bold tracking-tight text-foreground mt-0.5">
+                  ₦{salesChartData.reduce((sum, d) => sum + d.wholesaleRevenue, 0).toLocaleString()}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-purple-500 inline-block" /> Gross Profit (Margin)
+                </span>
+                <div className="text-lg sm:text-xl font-bold tracking-tight text-foreground mt-0.5 flex items-baseline gap-1">
+                  <span>₦{periodGrossProfit.toLocaleString()}</span>
+                  <span className="text-xs font-medium text-purple-600">({periodGrossMargin.toFixed(1)}%)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Recharts Interactive Visualizer */}
+            <div className="h-56 w-full pt-2">
+              {salesChartData.length === 0 || salesChartData.every((d) => d.totalRevenue === 0) ? (
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-2 border border-dashed rounded-xl bg-muted/10">
+                  <TrendingUp className="size-8 text-muted-foreground/40" />
+                  <p className="text-xs font-medium">No sales recorded during this {chartDays}-day period</p>
+                </div>
+              ) : chartType === "area" ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={salesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorRetail" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorWholesale" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: "currentColor" }}
+                      className="text-muted-foreground font-mono"
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: "currentColor" }}
+                      tickFormatter={(val) => (val >= 1000 ? `₦${(val / 1000).toFixed(0)}k` : `₦${val}`)}
+                      className="text-muted-foreground font-mono"
+                      width={60}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload as TimeSeriesPoint;
+                          return (
+                            <div className="bg-popover/95 backdrop-blur-sm border shadow-lg rounded-lg p-2.5 text-xs space-y-1.5 min-w-[170px]">
+                              <div className="font-semibold text-foreground border-b pb-1">
+                                {data.date} ({data.label})
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between gap-3 text-emerald-600 dark:text-emerald-400">
+                                  <span>Retail POS:</span>
+                                  <span className="font-mono font-semibold">₦{data.retailRevenue.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 text-blue-600 dark:text-blue-400">
+                                  <span>Wholesale:</span>
+                                  <span className="font-mono font-semibold">₦{data.wholesaleRevenue.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 text-purple-600 dark:text-purple-400">
+                                  <span>Gross Profit:</span>
+                                  <span className="font-mono font-semibold">₦{data.grossProfit.toLocaleString()}</span>
+                                </div>
+                                <div className="border-t pt-1 flex items-center justify-between gap-3 font-semibold text-foreground">
+                                  <span>Total Revenue:</span>
+                                  <span className="font-mono text-primary">₦{data.totalRevenue.toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    {(chartMetric === "revenue" || chartMetric === "retail") && (
+                      <Area
+                        type="monotone"
+                        dataKey="retailRevenue"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        fill="url(#colorRetail)"
+                        name="Retail POS"
+                      />
+                    )}
+                    {(chartMetric === "revenue" || chartMetric === "wholesale") && (
+                      <Area
+                        type="monotone"
+                        dataKey="wholesaleRevenue"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        fill="url(#colorWholesale)"
+                        name="Wholesale"
+                      />
+                    )}
+                    {chartMetric === "profit" && (
+                      <Area
+                        type="monotone"
+                        dataKey="grossProfit"
+                        stroke="#a855f7"
+                        strokeWidth={2.5}
+                        fill="url(#colorProfit)"
+                        name="Gross Profit"
+                      />
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={salesChartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/40" />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: "currentColor" }}
+                      className="text-muted-foreground font-mono"
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: "currentColor" }}
+                      tickFormatter={(val) => (val >= 1000 ? `₦${(val / 1000).toFixed(0)}k` : `₦${val}`)}
+                      className="text-muted-foreground font-mono"
+                      width={60}
+                    />
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload as TimeSeriesPoint;
+                          return (
+                            <div className="bg-popover/95 backdrop-blur-sm border shadow-lg rounded-lg p-2.5 text-xs space-y-1.5 min-w-[170px]">
+                              <div className="font-semibold text-foreground border-b pb-1">
+                                {data.date} ({data.label})
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between gap-3 text-emerald-600 dark:text-emerald-400">
+                                  <span>Retail POS:</span>
+                                  <span className="font-mono font-semibold">₦{data.retailRevenue.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 text-blue-600 dark:text-blue-400">
+                                  <span>Wholesale:</span>
+                                  <span className="font-mono font-semibold">₦{data.wholesaleRevenue.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 text-purple-600 dark:text-purple-400">
+                                  <span>Gross Profit:</span>
+                                  <span className="font-mono font-semibold">₦{data.grossProfit.toLocaleString()}</span>
+                                </div>
+                                <div className="border-t pt-1 flex items-center justify-between gap-3 font-semibold text-foreground">
+                                  <span>Total:</span>
+                                  <span className="font-mono text-primary">₦{data.totalRevenue.toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    {chartMetric === "profit" ? (
+                      <Bar dataKey="grossProfit" fill="#a855f7" radius={[4, 4, 0, 0]} name="Gross Profit" />
+                    ) : (
+                      <>
+                        {(chartMetric === "revenue" || chartMetric === "retail") && (
+                          <Bar
+                            dataKey="retailRevenue"
+                            fill="#10b981"
+                            radius={chartMetric === "retail" ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                            stackId={chartMetric === "revenue" ? "stack" : undefined}
+                            name="Retail POS"
+                          />
+                        )}
+                        {(chartMetric === "revenue" || chartMetric === "wholesale") && (
+                          <Bar
+                            dataKey="wholesaleRevenue"
+                            fill="#3b82f6"
+                            radius={[4, 4, 0, 0]}
+                            stackId={chartMetric === "revenue" ? "stack" : undefined}
+                            name="Wholesale"
+                          />
+                        )}
+                      </>
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* Bottom Legend & Navigation Footer */}
+            <div className="flex flex-wrap items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full bg-emerald-500 inline-block" /> Retail POS
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full bg-blue-500 inline-block" /> Wholesale Orders
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2.5 rounded-full bg-purple-500 inline-block" /> Profit Margin
+                </span>
+              </div>
+              <Link to="/analytics" className="text-xs text-primary font-medium flex items-center hover:underline group">
+                Deep Dive Analytics <ChevronRight className="size-3.5 ml-0.5 group-hover:translate-x-0.5 transition-transform" />
+              </Link>
             </div>
           </CardContent>
         </Card>

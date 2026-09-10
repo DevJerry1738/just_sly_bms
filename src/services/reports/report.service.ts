@@ -4,22 +4,50 @@ import { inventoryBalanceRepository } from "@/repositories/inventory-balance.rep
 import { inventoryBatchRepository } from "@/repositories/inventory-batch.repository";
 import { customerRepository } from "@/repositories/customer.repository";
 import { salesRepository } from "@/repositories/entity.repositories";
-import type { SalesSchema, WholesaleOrderSchema } from "@/database/schema";
+import { db, type SalesSchema, type WholesaleOrderSchema, type SaleItemSchema, type WholesaleOrderItemSchema } from "@/database/schema";
+import { format, subDays, startOfDay, endOfDay, eachDayOfInterval } from "date-fns";
+
+export interface TimeSeriesPoint {
+  date: string;
+  label: string;
+  timestamp: number;
+  retailRevenue: number;
+  wholesaleRevenue: number;
+  totalRevenue: number;
+  retailOrders: number;
+  wholesaleOrders: number;
+  totalOrders: number;
+  cogs: number;
+  grossProfit: number;
+  grossMargin: number; // percentage (0 - 100)
+}
+
+export interface TopProductMetric {
+  productId: string;
+  productName: string;
+  sku: string;
+  quantitySold: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  margin: number;
+}
 
 export interface SalesAnalytics {
   totalRevenue: number;
   posRevenue: number;
   wholesaleRevenue: number;
+  totalCost: number;             // COGS
+  grossProfit: number;           // totalRevenue - totalCost
+  grossMarginPercent: number;    // (grossProfit / totalRevenue) * 100
   totalOrders: number;
   posOrdersCount: number;
   wholesaleOrdersCount: number;
   averageOrderValue: number;
-  topProducts: Array<{
-    productId: string;
-    productName: string;
-    quantitySold: number;
-    revenue: number;
-  }>;
+  posAverageOrderValue: number;
+  wholesaleAverageOrderValue: number;
+  topProducts: TopProductMetric[];
+  timeSeries: TimeSeriesPoint[];
 }
 
 export interface InventoryAnalytics {
@@ -39,6 +67,8 @@ export interface WholesaleAnalytics {
   fulfilledCount: number;
   cancelledCount: number;
   totalRevenue: number;
+  totalWholesaleCost: number;
+  wholesaleGrossProfit: number;
   topCustomers: Array<{
     customerId: string;
     customerName: string;
@@ -50,83 +80,210 @@ export interface WholesaleAnalytics {
 export interface DateFilterOptions {
   startDate?: number;
   endDate?: number;
+  branchId?: string;
+  daysCount?: number;
 }
 
 class ReportService {
   /**
-   * Aggregate Sales Analytics across POS sales and Wholesale orders
+   * Aggregate Comprehensive Sales & Profitability Analytics across POS sales and Wholesale orders
    */
   async getSalesAnalytics(filters?: DateFilterOptions): Promise<SalesAnalytics> {
     try {
-      const { startDate, endDate } = filters || {};
+      const { startDate, endDate, branchId, daysCount = 7 } = filters || {};
 
-      const [allSales, allWholesaleOrders, products] = await Promise.all([
+      const [allSales, allSaleItems, allWholesaleOrders, allWholesaleItems, products, categories] = await Promise.all([
         salesRepository.getAll().catch(() => []),
+        db.sale_items.toArray().catch(() => []),
         wholesaleOrderRepository.getAll().catch(() => []),
+        db.wholesale_order_items.toArray().catch(() => []),
         productsRepository.getAll().catch(() => []),
+        db.categories.toArray().catch(() => []),
       ]);
 
-      const productMap = new Map<string, string>((products || []).map((p) => [p.id, p.name]));
+      const productMap = new Map((products || []).map((p) => [p.id, p]));
 
-      // Filter POS Sales
+      // 1. Filter POS Sales
       const filteredSales = (allSales || []).filter((s: SalesSchema) => {
+        if (branchId && s.branchId !== branchId) return false;
         if (startDate && s.createdAt < startDate) return false;
         if (endDate && s.createdAt > endDate) return false;
-        return s.status !== "voided";
+        return s.status === "completed";
       });
 
-      // Filter Wholesale Orders
+      // 2. Filter Wholesale Orders
       const filteredWholesale = (allWholesaleOrders || []).filter((w: WholesaleOrderSchema) => {
+        if (branchId && w.hqBranchId !== branchId) return false;
         if (startDate && w.createdAt < startDate) return false;
         if (endDate && w.createdAt > endDate) return false;
-        return w.status !== "cancelled";
+        return w.status !== "cancelled" && w.paymentStatus === "confirmed";
       });
 
-      const posRevenue = filteredSales.reduce((acc: number, item: SalesSchema) => acc + ((item.totalAmount as number) || 0), 0);
-      const wholesaleRevenue = filteredWholesale.reduce((acc: number, item: WholesaleOrderSchema) => acc + (item.totalAmount || 0), 0);
+      const validSaleIds = new Set(filteredSales.map((s) => s.id));
+      const validWholesaleIds = new Set(filteredWholesale.map((w) => w.id));
+
+      const filteredSaleItems = allSaleItems.filter((i) => validSaleIds.has(i.saleId));
+      const filteredWholesaleItems = allWholesaleItems.filter((i) => validWholesaleIds.has(i.orderId));
+
+      // Calculate Revenues
+      const posRevenue = filteredSales.reduce((acc, s) => acc + (s.totalAmount || 0), 0);
+      const wholesaleRevenue = filteredWholesale.reduce((acc, w) => acc + (w.totalAmount || 0), 0);
       const totalRevenue = posRevenue + wholesaleRevenue;
 
+      // Calculate Costs (COGS)
+      const posCost = filteredSaleItems.reduce((acc, item) => {
+        const unitCost = item.costPrice || (productMap.get(item.productId)?.costPrice ?? 0);
+        return acc + unitCost * (item.baseQuantity || item.quantity || 1);
+      }, 0);
+
+      const wholesaleCost = filteredWholesaleItems.reduce((acc, item) => {
+        const unitCost = item.costPriceSnapshot || (productMap.get(item.productId)?.costPrice ?? 0);
+        return acc + unitCost * (item.baseQuantity || item.quantity || 1);
+      }, 0);
+
+      const totalCost = posCost + wholesaleCost;
+      const grossProfit = totalRevenue - totalCost;
+      const grossMarginPercent = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+
+      // Order counts & AOV
       const posOrdersCount = filteredSales.length;
       const wholesaleOrdersCount = filteredWholesale.length;
       const totalOrders = posOrdersCount + wholesaleOrdersCount;
 
       const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+      const posAverageOrderValue = posOrdersCount > 0 ? posRevenue / posOrdersCount : 0;
+      const wholesaleAverageOrderValue = wholesaleOrdersCount > 0 ? wholesaleRevenue / wholesaleOrdersCount : 0;
 
-      // Track product sales revenue & quantity
-      const productSalesMap = new Map<string, { quantitySold: number; revenue: number }>();
+      // 3. Product Profitability Leaderboard
+      const productPerformanceMap = new Map<
+        string,
+        { quantitySold: number; revenue: number; cost: number; name: string; sku: string }
+      >();
 
-      for (const sale of filteredSales) {
-        const items = (sale as Record<string, unknown>).items;
-        if (items && Array.isArray(items)) {
-          for (const item of items) {
-            const current = productSalesMap.get(item.productId) || { quantitySold: 0, revenue: 0 };
-            productSalesMap.set(item.productId, {
-              quantitySold: current.quantitySold + (item.quantity || 0),
-              revenue: current.revenue + (item.subtotal || 0),
-            });
-          }
-        }
+      for (const item of filteredSaleItems) {
+        const prod = productMap.get(item.productId);
+        const unitCost = item.costPrice || (prod?.costPrice ?? 0);
+        const current = productPerformanceMap.get(item.productId) || {
+          quantitySold: 0,
+          revenue: 0,
+          cost: 0,
+          name: item.productName || prod?.name || "Product",
+          sku: prod?.sku || item.productId.slice(0, 8),
+        };
+        const qty = item.quantity || 1;
+        const lineRevenue = item.subtotal || (item.unitPrice || 0) * qty;
+        const lineCost = unitCost * (item.baseQuantity || qty);
+
+        current.quantitySold += qty;
+        current.revenue += lineRevenue;
+        current.cost += lineCost;
+        productPerformanceMap.set(item.productId, current);
       }
 
-      const topProducts: Array<{ productId: string; productName: string; quantitySold: number; revenue: number }> = Array.from(productSalesMap.entries())
-        .map(([productId, val]) => ({
-          productId,
-          productName: productMap.get(productId) || `Product (${productId.slice(0, 6)})`,
-          quantitySold: val.quantitySold,
-          revenue: val.revenue,
-        }))
+      for (const item of filteredWholesaleItems) {
+        const prod = productMap.get(item.productId);
+        const unitCost = item.costPriceSnapshot || (prod?.costPrice ?? 0);
+        const current = productPerformanceMap.get(item.productId) || {
+          quantitySold: 0,
+          revenue: 0,
+          cost: 0,
+          name: item.productName || prod?.name || "Product",
+          sku: item.sku || prod?.sku || item.productId.slice(0, 8),
+        };
+        const qty = item.quantity || 1;
+        const lineRevenue = item.subtotal || (item.unitPriceSnapshot || 0) * qty;
+        const lineCost = unitCost * (item.baseQuantity || qty);
+
+        current.quantitySold += qty;
+        current.revenue += lineRevenue;
+        current.cost += lineCost;
+        productPerformanceMap.set(item.productId, current);
+      }
+
+      const topProducts: TopProductMetric[] = Array.from(productPerformanceMap.entries())
+        .map(([productId, val]) => {
+          const profit = val.revenue - val.cost;
+          const margin = val.revenue > 0 ? (profit / val.revenue) * 100 : 0;
+          return {
+            productId,
+            productName: val.name,
+            sku: val.sku,
+            quantitySold: val.quantitySold,
+            revenue: val.revenue,
+            cost: val.cost,
+            profit,
+            margin,
+          };
+        })
         .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5);
+        .slice(0, 10);
+
+      // 4. Time Series Generation
+      const now = new Date();
+      const numDays = Math.max(1, Math.min(daysCount, 90));
+      const timeSeries: TimeSeriesPoint[] = Array.from({ length: numDays }).map((_, idx) => {
+        const dayDate = subDays(now, numDays - 1 - idx);
+        const dayStart = startOfDay(dayDate).getTime();
+        const dayEnd = endOfDay(dayDate).getTime();
+
+        const daySales = filteredSales.filter((s) => s.createdAt >= dayStart && s.createdAt <= dayEnd);
+        const dayWholesale = filteredWholesale.filter((w) => w.createdAt >= dayStart && w.createdAt <= dayEnd);
+
+        const daySaleIds = new Set(daySales.map((s) => s.id));
+        const dayWholesaleIds = new Set(dayWholesale.map((w) => w.id));
+
+        const daySaleItems = filteredSaleItems.filter((i) => daySaleIds.has(i.saleId));
+        const dayWholesaleItems = filteredWholesaleItems.filter((i) => dayWholesaleIds.has(i.orderId));
+
+        const dayRetailRev = daySales.reduce((acc, s) => acc + (s.totalAmount || 0), 0);
+        const dayWholesaleRev = dayWholesale.reduce((acc, w) => acc + (w.totalAmount || 0), 0);
+        const dayTotalRev = dayRetailRev + dayWholesaleRev;
+
+        const dayRetailCost = daySaleItems.reduce((acc, item) => {
+          const unitCost = item.costPrice || (productMap.get(item.productId)?.costPrice ?? 0);
+          return acc + unitCost * (item.baseQuantity || item.quantity || 1);
+        }, 0);
+
+        const dayWholesaleCost = dayWholesaleItems.reduce((acc, item) => {
+          const unitCost = item.costPriceSnapshot || (productMap.get(item.productId)?.costPrice ?? 0);
+          return acc + unitCost * (item.baseQuantity || item.quantity || 1);
+        }, 0);
+
+        const dayTotalCost = dayRetailCost + dayWholesaleCost;
+        const dayGrossProfit = dayTotalRev - dayTotalCost;
+        const dayMargin = dayTotalRev > 0 ? (dayGrossProfit / dayTotalRev) * 100 : 0;
+
+        return {
+          date: format(dayDate, "yyyy-MM-dd"),
+          label: numDays <= 14 ? format(dayDate, "EEE dd") : format(dayDate, "MMM dd"),
+          timestamp: dayStart,
+          retailRevenue: dayRetailRev,
+          wholesaleRevenue: dayWholesaleRev,
+          totalRevenue: dayTotalRev,
+          retailOrders: daySales.length,
+          wholesaleOrders: dayWholesale.length,
+          totalOrders: daySales.length + dayWholesale.length,
+          cogs: dayTotalCost,
+          grossProfit: dayGrossProfit,
+          grossMargin: dayMargin,
+        };
+      });
 
       return {
         totalRevenue,
         posRevenue,
         wholesaleRevenue,
+        totalCost,
+        grossProfit,
+        grossMarginPercent,
         totalOrders,
         posOrdersCount,
         wholesaleOrdersCount,
         averageOrderValue,
+        posAverageOrderValue,
+        wholesaleAverageOrderValue,
         topProducts,
+        timeSeries,
       };
     } catch (err) {
       console.error("[ReportService] Failed to calculate sales analytics:", err);
@@ -134,11 +291,17 @@ class ReportService {
         totalRevenue: 0,
         posRevenue: 0,
         wholesaleRevenue: 0,
+        totalCost: 0,
+        grossProfit: 0,
+        grossMarginPercent: 0,
         totalOrders: 0,
         posOrdersCount: 0,
         wholesaleOrdersCount: 0,
         averageOrderValue: 0,
+        posAverageOrderValue: 0,
+        wholesaleAverageOrderValue: 0,
         topProducts: [],
+        timeSeries: [],
       };
     }
   }
