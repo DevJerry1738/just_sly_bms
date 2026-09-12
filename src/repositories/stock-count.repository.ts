@@ -109,7 +109,7 @@ export class StockCountRepository extends BaseRepository<StockCountSessionSchema
             systemQuantity: batch.quantityOnHand,
             countedQuantity: null,
             variance: null,
-            unitCost: batch.unitCost,
+            unitCost: batch.unitCost ?? 0,
             varianceValue: null,
             notes: undefined,
             countedBy: null,

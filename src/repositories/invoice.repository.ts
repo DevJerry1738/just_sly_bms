@@ -15,7 +15,7 @@ export class InvoiceRepository extends BaseRepository<InvoiceSchema> {
   /** Find invoices for a customer */
   async getByCustomerId(customerId: string): Promise<InvoiceSchema[]> {
     const invoices = await db.invoices.where("customerId").equals(customerId).toArray();
-    return invoices.sort((a, b) => b.createdAt - a.createdAt);
+    return invoices.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
   }
 
   /** Generate unique invoice number e.g. INV-000124 */

@@ -136,12 +136,13 @@ export class InventoryTransactionRepository {
       );
 
       // Low Stock Notification Check (only on stock deduction)
-      if (input.quantity < 0) {
+      if (input.quantity < 0 && updatedBalance) {
         try {
           const product = await db.products.get(input.productId);
           const branch = await db.branches.get(input.branchId);
           const threshold = product?.lowStockThreshold ?? 5;
-          const currentQty = updatedBalance.quantityOnHand;
+          const balanceRecord = updatedBalance as InventoryBalanceSchema;
+          const currentQty = balanceRecord.quantityOnHand;
           const previousQty = currentQty - input.quantity; // since quantity < 0
 
           if (currentQty <= threshold && previousQty > threshold) {

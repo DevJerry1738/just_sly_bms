@@ -47,12 +47,12 @@ export function ReportsPage() {
         "Gross Margin (%)",
       ];
       const rows = sales.topProducts.map((p) => [
-        p.name,
-        p.quantity,
+        p.productName,
+        p.quantitySold,
         p.revenue,
         p.cost,
         p.profit,
-        `${p.marginPercent.toFixed(1)}%`,
+        `${p.margin.toFixed(1)}%`,
       ]);
       reportService.exportToCSV("product_profitability_breakdown.csv", headers, rows);
       toast.success("Product profitability breakdown exported!");

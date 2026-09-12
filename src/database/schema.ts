@@ -30,6 +30,14 @@ export interface InventorySchema {
   [key: string]: unknown;
 }
 
+export interface OrdersSchema {
+  id: string;
+  branchId?: string;
+  status: string;
+  createdAt: number;
+  [key: string]: unknown;
+}
+
 export interface SalesSchema {
   id: string;
   branchId: string;
@@ -961,6 +969,7 @@ export class JustSlyDatabase extends Dexie {
   payment_receipts!: Table<PaymentReceiptSchema, string>;
   invoices!: Table<InvoiceSchema, string>;
   notification_deliveries!: Table<NotificationDeliverySchema, string>;
+  email_templates!: Table<EmailTemplateSchema, string>;
 
   constructor() {
     super("JustSlySuiteDB");
@@ -1263,6 +1272,7 @@ export class JustSlyDatabase extends Dexie {
       payment_receipts: "id, orderId, uploadedAt",
       invoices: "id, orderId, invoiceNumber, issuedAt",
       customer_accounts: "id, authUserId, customerCode, email, status, createdAt",
+      email_templates: "id, key, category, isActive, isSystem, updatedAt",
     });
   }
 }

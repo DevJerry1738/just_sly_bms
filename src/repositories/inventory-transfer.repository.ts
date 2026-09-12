@@ -197,7 +197,7 @@ export class InventoryTransferRepository extends BaseRepository<InventoryTransfe
    */
   async getTransferValue(transferId: string): Promise<number> {
     const items = await db.inventory_transfer_items.where("transferId").equals(transferId).toArray();
-    return items.reduce((sum, item) => sum + item.convertedBaseQuantity * item.unitCostSnapshot, 0);
+    return items.reduce((sum, item) => sum + item.convertedBaseQuantity * (item.unitCostSnapshot ?? 0), 0);
   }
 
   /**
@@ -214,7 +214,7 @@ export class InventoryTransferRepository extends BaseRepository<InventoryTransfe
 
     const totalQuantity = items.reduce((sum, item) => sum + item.convertedBaseQuantity, 0);
     const totalValue = items.reduce(
-      (sum, item) => sum + item.convertedBaseQuantity * item.unitCostSnapshot,
+      (sum, item) => sum + item.convertedBaseQuantity * (item.unitCostSnapshot ?? 0),
       0
     );
 

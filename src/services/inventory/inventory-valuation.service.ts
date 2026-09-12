@@ -31,8 +31,7 @@ export class InventoryValuationService {
     const allocations: FifoDeductionResult["allocations"] = [];
 
     for (const batch of activeBatches) {
-      if (needed <= 0) break;
-
+      const take = Math.min(needed, batch.quantityOnHand);
       const unitCost = batch.unitCost ?? 0;
       const batchCost = take * unitCost;
 
