@@ -38,28 +38,49 @@ export class NotificationService {
       sync_status: "pending",
     };
 
-    // Determine category for preference check
-    const category = this.getEventCategory(event.type);
-    const recipient = { userId: event.targetUserId, customerId: event.targetCustomerId };
+    try {
+      // Determine category for preference check
+      const category = this.getEventCategory(event.type);
+      const recipient = { userId: event.targetUserId, customerId: event.targetCustomerId };
 
-    // Check user notification preferences
-    const pref = await notificationPreferenceRepository.getCategoryPreference(recipient, category);
+      // Check user notification preferences
+      let pref = null;
+      try {
+        pref = await notificationPreferenceRepository.getCategoryPreference(recipient, category);
+      } catch (prefErr) {
+        console.warn("[NotificationService] Could not load notification preference:", prefErr);
+      }
 
-    const allowInApp = pref ? pref.inApp : true;
-    const allowEmail = pref ? pref.email : true;
-    const allowWhatsApp = pref ? pref.whatsapp : false;
+      const allowInApp = pref ? pref.inApp : true;
+      const allowEmail = pref ? pref.email : true;
+      const allowWhatsApp = pref ? pref.whatsapp : false;
 
-    // Dispatch to enabled channels
-    if (allowInApp) {
-      await inAppChannel.dispatch(notification);
-    }
+      // Dispatch to enabled channels
+      if (allowInApp) {
+        try {
+          await inAppChannel.dispatch(notification);
+        } catch (inAppErr) {
+          console.warn("[NotificationService] In-app dispatch failed:", inAppErr);
+        }
+      }
 
-    if (allowEmail) {
-      await emailChannel.dispatch(notification);
-    }
+      if (allowEmail) {
+        try {
+          await emailChannel.dispatch(notification);
+        } catch (emailErr) {
+          console.warn("[NotificationService] Email dispatch failed:", emailErr);
+        }
+      }
 
-    if (allowWhatsApp) {
-      await whatsappChannel.dispatch(notification);
+      if (allowWhatsApp) {
+        try {
+          await whatsappChannel.dispatch(notification);
+        } catch (waErr) {
+          console.warn("[NotificationService] WhatsApp dispatch failed:", waErr);
+        }
+      }
+    } catch (dispatchErr) {
+      console.error("[NotificationService] Failed to dispatch notification:", dispatchErr);
     }
 
     return notification;

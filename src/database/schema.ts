@@ -121,6 +121,7 @@ export interface WholesaleOrderItemSchema {
   id: string;
   orderId: string;
   productId: string;
+  productCode?: string;
   productName: string;
   sku: string;
   sellingUnit: string;
@@ -132,6 +133,7 @@ export interface WholesaleOrderItemSchema {
   subtotal: number;
   createdAt: number;
   sync_status?: "synced" | "pending" | "error";
+  [key: string]: unknown;
 }
 
 export interface OrderStatusHistorySchema {
@@ -142,32 +144,53 @@ export interface OrderStatusHistorySchema {
   changedBy: string;
   reason?: string;
   timestamp: number;
+  [key: string]: unknown;
 }
 
 export interface OrderPaymentSchema {
   id: string;
   orderId: string;
+  paymentMethod?: string;
   amount: number;
   status: string;
+  reference?: string;
   createdAt: number;
+  sync_status?: "synced" | "pending" | "error";
+  [key: string]: unknown;
 }
 
 export interface PaymentReceiptSchema {
   id: string;
   orderId: string;
+  paymentId?: string;
   fileName: string;
+  filePath?: string;
+  mimeType?: string;
+  fileSize?: number;
+  uploadedBy?: string;
   bankName?: string;
   transferReference?: string;
-  storagePath: string;
+  storagePath?: string;
+  publicUrl?: string;
   uploadedAt: number;
+  sync_status?: "synced" | "pending" | "error";
+  [key: string]: unknown;
 }
 
 export interface InvoiceSchema {
   id: string;
   orderId: string;
   invoiceNumber: string;
-  amount: number;
-  issuedAt: number;
+  customerId?: string;
+  amount?: number;
+  amountDue?: number;
+  dueDate?: number;
+  status?: string;
+  issuedAt?: number;
+  createdAt?: number;
+  updatedAt?: number;
+  sync_status?: "synced" | "pending" | "error";
+  [key: string]: unknown;
 }
 
 export type CustomerAccountStatus = "active" | "inactive" | "suspended";
@@ -201,6 +224,31 @@ export interface CustomersSchema {
   [key: string]: unknown;
 }
 
+export type NotificationPriority = "info" | "important" | "critical";
+
+export type NotificationType =
+  | "order_created"
+  | "new_wholesale_order"
+  | "payment_submitted"
+  | "payment_receipt_submitted"
+  | "payment_confirmed"
+  | "payment_rejected"
+  | "order_processing"
+  | "order_ready"
+  | "order_dispatched"
+  | "order_delivered"
+  | "order_cancelled"
+  | "low_stock"
+  | "expiry_warning"
+  | "expired_stock"
+  | "branch_transfer_created"
+  | "branch_transfer_accepted"
+  | "branch_transfer_rejected"
+  | "branch_transfer_dispatched"
+  | "branch_transfer_received"
+  | "branch_transfer_cancelled"
+  | string;
+
 export interface NotificationPreferenceSchema {
   id: string;
   userId?: string;
@@ -216,8 +264,33 @@ export interface NotificationPreferenceSchema {
 
 export interface NotificationsSchema {
   id: string;
+  organizationId?: string;
+  branchId?: string;
+  recipientUserId?: string;
+  recipientCustomerId?: string;
+  type?: NotificationType;
+  title?: string;
+  message?: string;
+  priority?: NotificationPriority;
+  entityType?: string;
+  entityId?: string;
+  entityRoute?: string;
   read: boolean;
   createdAt: number;
+  sync_status?: "synced" | "pending" | "error";
+  [key: string]: unknown;
+}
+
+export interface NotificationDeliverySchema {
+  id: string;
+  notificationId: string;
+  channel: "in_app" | "email" | "whatsapp" | string;
+  status: "delivered" | "failed" | "pending" | string;
+  errorMessage?: string;
+  attemptedAt: number;
+  deliveredAt?: number;
+  failedAt?: number;
+  sync_status?: "synced" | "pending" | "error";
   [key: string]: unknown;
 }
 
@@ -871,6 +944,7 @@ export class JustSlyDatabase extends Dexie {
   order_payments!: Table<OrderPaymentSchema, string>;
   payment_receipts!: Table<PaymentReceiptSchema, string>;
   invoices!: Table<InvoiceSchema, string>;
+  notification_deliveries!: Table<NotificationDeliverySchema, string>;
 
   constructor() {
     super("JustSlySuiteDB");
@@ -1087,6 +1161,57 @@ export class JustSlyDatabase extends Dexie {
       orders: "id, branchId, status, createdAt",
       customers: "id, email, phone, updatedAt",
       notifications: "id, read, createdAt",
+      organizations: "id, name, updated_at",
+      user_profiles: "id, userId, displayName, email, updatedAt",
+      user_preferences: "id, userId, theme, updatedAt",
+      branches: "id, code, name, status, managerId, updatedAt",
+      staff: "id, authUserId, employeeCode, email, branchId, status, updatedAt",
+      roles: "id, code, name, status, isSystem",
+      permissions: "id, category, resource, action",
+      role_permissions: "id, roleId, permissionId",
+      user_roles: "id, userId, roleId, branchId",
+      user_permission_overrides: "id, [userId+permissionId], organizationId, userId, permissionId, effect, updatedAt",
+      audit_logs: "id, userId, branchId, entity, entityId, action, timestamp, synced",
+      units_of_measure: "id, name, abbreviation, status, isSystem",
+      categories: "id, code, name, status, parentId, updatedAt",
+      product_packaging: "id, productId, sortOrder, updatedAt",
+      price_history: "id, productId, priceType, changedBy, timestamp",
+      product_import_jobs: "id, status, createdAt",
+      inventory_transactions: "id, productId, branchId, type, referenceNumber, batchId, sessionId, performedBy, timestamp",
+      inventory_balances: "id, [productId+branchId], productId, branchId, updatedAt",
+      inventory_batches: "id, productId, branchId, batchNumber, expiryDate, status, updatedAt",
+      inventory_adjustments: "id, transactionId, productId, branchId, reason, timestamp",
+      inventory_alerts: "id, type, severity, productId, branchId, batchId, acknowledged, createdAt",
+      stock_count_sessions: "id, sessionNumber, branchId, status, startedAt",
+      stock_count_items: "id, sessionId, productId, batchId",
+      inventory_transfers: "id, transferNumber, transferType, sourceBranchId, destinationBranchId, status, createdBy, createdAt, updatedAt",
+      inventory_transfer_items: "id, transferId, productId, batchId, createdAt",
+      inventory_transfer_batches: "id, transferItemId, batchId, createdAt",
+      inventory_reservations: "id, productId, branchId, transferId, createdAt, releasedAt",
+      transfer_status_history: "id, transferId, timestamp",
+      wholesale_orders: "id, orderNumber, customerId, hqBranchId, status, paymentStatus, createdAt",
+      wholesale_order_items: "id, orderId, productId, createdAt",
+      order_status_history: "id, orderId, timestamp",
+      order_payments: "id, orderId, status, createdAt",
+      payment_receipts: "id, orderId, uploadedAt",
+      invoices: "id, orderId, invoiceNumber, issuedAt",
+      customer_accounts: "id, authUserId, customerCode, email, status, createdAt",
+    });
+
+    this.version(12).stores({
+      syncQueue: "id, entityType, operationType, status, priority, timestamp, retryCount",
+      syncMetadata: "id, entityType, lastSyncedAt",
+      products: "id, code, sku, barcode, name, categoryId, status, updatedAt",
+      inventory: "id, productId, branchId, quantity, updatedAt",
+      sales: "id, branchId, saleNumber, status, paymentStatus, createdAt",
+      sale_items: "id, saleId, productId, createdAt",
+      sale_payments: "id, saleId, method, status, createdAt",
+      sale_voids: "id, saleId, voidedBy, createdAt",
+      orders: "id, branchId, status, createdAt",
+      customers: "id, email, phone, updatedAt",
+      notifications: "id, recipientUserId, recipientCustomerId, branchId, read, createdAt",
+      notification_preferences: "id, userId, customerId, category, updatedAt",
+      notification_deliveries: "id, notificationId, channel, status, attemptedAt",
       organizations: "id, name, updated_at",
       user_profiles: "id, userId, displayName, email, updatedAt",
       user_preferences: "id, userId, theme, updatedAt",

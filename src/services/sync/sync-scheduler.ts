@@ -361,7 +361,7 @@ export class SyncScheduler {
 
       // 5. Pull normalized customer, POS, and wholesale records.
       const putRemote = async (
-        table: { get: (id: string) => Promise<Record<string, unknown> | undefined>; put: (record: Record<string, unknown>) => Promise<unknown> },
+        table: any,
         record: Record<string, unknown>,
       ) => {
         const existing = await table.get(record.id as string);
