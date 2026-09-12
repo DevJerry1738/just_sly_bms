@@ -40,8 +40,8 @@ export class EmailChannel {
     try {
       const result = await this.provider.send(
         recipientEmail,
-        notification.title,
-        `<div style="font-family: sans-serif; padding: 20px;"><h2>${notification.title}</h2><p>${notification.message}</p></div>`
+        notification.title || "Notification",
+        `<div style="font-family: sans-serif; padding: 20px;"><h2>${notification.title || "Notification"}</h2><p>${notification.message || ""}</p></div>`
       );
 
       await notificationDeliveryRepository.create({

@@ -109,7 +109,7 @@ export class SyncQueueService {
       .equals("failed")
       .filter((item) =>
         item.entityType === entityType &&
-        (!errorIncludes || item.errorMessage?.includes(errorIncludes)),
+        (!errorIncludes || (item.errorMessage?.includes(errorIncludes) ?? false))
       )
       .toArray();
 

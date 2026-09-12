@@ -14,25 +14,8 @@ export class InventoryBalanceService {
 
     // Sum all transactions: inbound (+) and outbound (-)
     const onHand = transactions.reduce((sum, txn) => {
-      const quantity = txn.quantityInBaseUnit || 0;
-      if (
-        txn.transactionType === "opening_balance" ||
-        txn.transactionType === "purchase_received" ||
-        txn.transactionType === "branch_transfer_in" ||
-        txn.transactionType === "adjustment_increase" ||
-        txn.transactionType === "return_from_customer"
-      ) {
-        return sum + quantity;
-      } else if (
-        txn.transactionType === "sales_order" ||
-        txn.transactionType === "branch_transfer_out" ||
-        txn.transactionType === "adjustment_decrease" ||
-        txn.transactionType === "damage_loss" ||
-        txn.transactionType === "sample_distribution"
-      ) {
-        return sum - quantity;
-      }
-      return sum;
+      const quantity = txn.quantity || 0;
+      return sum + quantity;
     }, 0);
 
     return Math.max(0, onHand); // Never negative

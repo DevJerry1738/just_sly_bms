@@ -39,8 +39,8 @@ export class WhatsAppChannel {
 
     try {
       const result = await this.provider.sendTemplate(recipientPhone, "operational_notification", {
-        title: notification.title,
-        message: notification.message,
+        title: notification.title || "Notification",
+        message: notification.message || "",
       });
 
       await notificationDeliveryRepository.create({

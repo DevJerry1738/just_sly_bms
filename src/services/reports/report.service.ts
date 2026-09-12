@@ -457,6 +457,8 @@ class ReportService {
         fulfilledCount,
         cancelledCount,
         totalRevenue,
+        totalWholesaleCost: 0,
+        wholesaleGrossProfit: totalRevenue,
         topCustomers,
       };
     } catch (err) {
@@ -468,6 +470,8 @@ class ReportService {
         fulfilledCount: 0,
         cancelledCount: 0,
         totalRevenue: 0,
+        totalWholesaleCost: 0,
+        wholesaleGrossProfit: 0,
         topCustomers: [],
       };
     }

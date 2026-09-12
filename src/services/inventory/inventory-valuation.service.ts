@@ -33,14 +33,14 @@ export class InventoryValuationService {
     for (const batch of activeBatches) {
       if (needed <= 0) break;
 
-      const take = Math.min(needed, batch.quantityOnHand);
-      const batchCost = take * batch.unitCost;
+      const unitCost = batch.unitCost ?? 0;
+      const batchCost = take * unitCost;
 
       allocations.push({
         batchId: batch.id,
         batchNumber: batch.batchNumber,
         quantityDeducted: take,
-        unitCost: batch.unitCost,
+        unitCost: unitCost,
         totalCost: batchCost,
       });
 

@@ -158,7 +158,7 @@ export class SyncScheduler {
       // entity names with no registered handler.
       const enqueueUnsent = async (
         entityType: string,
-        table: { toArray: () => Promise<Array<Record<string, unknown>>> },
+        table: any,
         remoteTable: string,
       ) => {
         const { data, error } = await client.from(remoteTable).select("id");
@@ -322,7 +322,6 @@ export class SyncScheduler {
             description: rp.description || existingProduct?.description || undefined,
             categoryId: rp.category_id ?? existingProduct?.categoryId ?? null,
             brand: rp.brand || existingProduct?.brand || undefined,
-            manufacturer: rp.manufacturer || existingProduct?.manufacturer || undefined,
             baseUnit: rp.base_unit || existingProduct?.baseUnit || "Piece",
             trackExpiry: rp.track_expiry ?? existingProduct?.trackExpiry ?? false,
             lowStockThreshold: rp.low_stock_threshold ?? existingProduct?.lowStockThreshold ?? 0,

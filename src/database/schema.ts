@@ -316,7 +316,23 @@ export interface OrganizationSchema {
   show_receipt_logo?: boolean;
   /** Configurable product code prefix, e.g. "JSP". Defaults to "JSP" if not set. */
   product_code_prefix?: string;
+  default_low_stock_threshold?: number;
   updated_at: number;
+  sync_status?: "synced" | "pending" | "error";
+  [key: string]: unknown;
+}
+
+export interface EmailTemplateSchema {
+  id: string;
+  key: string;
+  category: string;
+  name: string;
+  subject: string;
+  body: string;
+  variables: string[];
+  isActive: boolean;
+  isSystem: boolean;
+  updatedAt: number;
   sync_status?: "synced" | "pending" | "error";
   [key: string]: unknown;
 }
