@@ -45,6 +45,14 @@ export class SyncQueueService {
       .sortBy("priority");
   }
 
+  /** Loads queue items that can affect dependency resolution. */
+  static async getDependencyItems(): Promise<SyncQueueItem[]> {
+    return db.syncQueue
+      .where("status")
+      .anyOf("pending", "syncing", "failed")
+      .toArray();
+  }
+
   /**
    * Returns total number of unsynced items.
    */
@@ -111,6 +119,23 @@ export class SyncQueueService {
         item.entityType === entityType &&
         (!errorIncludes || (item.errorMessage?.includes(errorIncludes) ?? false))
       )
+      .toArray();
+
+    for (const item of failed) {
+      await db.syncQueue.update(item.id, {
+        status: "pending",
+        errorMessage: undefined,
+      });
+    }
+    return failed.length;
+  }
+
+  /** Requeue failed records for a related set of entities. */
+  static async requeueFailedForEntities(entityTypes: string[]): Promise<number> {
+    const failed = await db.syncQueue
+      .where("status")
+      .equals("failed")
+      .filter((item) => entityTypes.includes(item.entityType))
       .toArray();
 
     for (const item of failed) {

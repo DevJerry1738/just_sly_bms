@@ -215,3 +215,34 @@ The fix is complete only when all of the following are true:
 - permission overrides appear in `public.user_permission_overrides`
 - a fresh browser sees the same sales and restriction state as the original admin browser
 - the queue is empty or only contains genuine non-failing items after successful sync
+
+## End-to-End Wholesale Sync Recovery
+
+### Test Case 5.1: Parent and child queue ordering
+- **Objective**: Verify a wholesale order and all dependent records upload in dependency order.
+- **Steps**:
+  1. Use Browser A while online and create a wholesale order with at least one item.
+  2. Inspect `JustSlySuiteDB.syncQueue` and note the order ID on the order, item, and status-history payloads.
+  3. Trigger sync and confirm the `wholesale_orders` item completes before its dependent items.
+  4. In Supabase, verify rows exist in `wholesale_orders`, `wholesale_order_items`, and `order_status_history`.
+- **Expected Result**: The child records are not skipped after the parent is removed from the queue.
+
+### Test Case 5.2: Failed parent recovery
+- **Objective**: Verify a failed wholesale parent blocks children and scoped recovery retries the family.
+- **Steps**:
+  1. Temporarily use an invalid parent reference or an unapplied schema migration to produce a failed `wholesale_orders` queue item.
+  2. Trigger sync and confirm dependent child items remain blocked or become failed with a dependency error.
+  3. Correct the remote prerequisite or apply `20260914120000_extend_wholesale_sync_columns.sql`.
+  4. Trigger recovery while online.
+  5. Confirm the parent uploads first, then items, history, payments, receipts, and invoices upload.
+  6. Confirm unrelated failed entity types were not requeued by the scoped sync trigger.
+- **Expected Result**: Local records remain available until successful upload, and the wholesale family reaches a synced state.
+
+### Test Case 5.3: Cross-browser wholesale pull
+- **Objective**: Verify normalized wholesale data rehydrates a fresh browser.
+- **Steps**:
+  1. In Browser A, submit a payment receipt and generate an invoice for a synced order.
+  2. Verify Supabase rows and fields in `order_payments`, `payment_receipts`, and `invoices`.
+  3. Open Browser B with a fresh profile against the same Supabase project.
+  4. Sign in and trigger pull-sync, then inspect the wholesale tables in IndexedDB.
+- **Expected Result**: Browser B contains the order, items, status history, payment metadata, receipt metadata, and invoice data.

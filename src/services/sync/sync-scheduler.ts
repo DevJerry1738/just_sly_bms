@@ -568,6 +568,7 @@ export class SyncScheduler {
             orderId: row.order_id,
             paymentId: row.payment_id,
             filePath: row.storage_path,
+            storagePath: row.storage_path,
             fileName: row.file_name,
             mimeType: row.mime_type || "application/octet-stream",
             fileSize: Number(row.file_size ?? 0),
@@ -590,6 +591,7 @@ export class SyncScheduler {
             orderId: row.order_id,
             invoiceNumber: row.invoice_number,
             customerId: row.customer_id,
+            amount: Number(row.amount ?? row.amount_due ?? 0),
             amountDue: Number(row.amount ?? row.amount_due ?? 0),
             dueDate: row.due_date ? milliseconds(row.due_date) : undefined,
             status: row.status || "unpaid",
@@ -726,6 +728,14 @@ export class SyncScheduler {
   static async triggerSync(): Promise<void> {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
+    await SyncQueueService.requeueFailedForEntities([
+      "wholesale_orders",
+      "wholesale_order_items",
+      "order_status_history",
+      "order_payments",
+      "payment_receipts",
+      "invoices",
+    ]);
     await SyncQueueService.requeueFailedForEntity(
       "sale_items",
       "No sync handler registered",

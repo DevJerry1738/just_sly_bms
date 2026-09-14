@@ -330,8 +330,10 @@ SyncManager.registerHandler("order_payments", async (operationType, payload) => 
   const { error } = await client.from("order_payments").upsert({
     id,
     order_id: payload["orderId"],
+    payment_method: payload["paymentMethod"] || null,
     amount: payload["amount"] ?? 0,
     status: payload["status"],
+    reference: toCleanStringOrNull(payload["reference"]),
     created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
   }, { onConflict: "id" });
   if (!error) await markLocalSynced(db.order_payments, id);
@@ -347,10 +349,15 @@ SyncManager.registerHandler("payment_receipts", async (operationType, payload) =
   const { error } = await client.from("payment_receipts").upsert({
     id,
     order_id: payload["orderId"],
+    payment_id: payload["paymentId"] || null,
     file_name: payload["fileName"],
     bank_name: toCleanStringOrNull(payload["bankName"]),
     transfer_reference: toCleanStringOrNull(payload["transferReference"]),
     storage_path: payload["filePath"] || payload["storagePath"],
+    mime_type: toCleanStringOrNull(payload["mimeType"]),
+    file_size: payload["fileSize"] ?? null,
+    uploaded_by: toCleanStringOrNull(payload["uploadedBy"]),
+    public_url: toCleanStringOrNull(payload["publicUrl"]),
     uploaded_at: new Date(Number(payload["uploadedAt"] || Date.now())).toISOString(),
   }, { onConflict: "id" });
   if (!error) await markLocalSynced(db.payment_receipts, id);
@@ -367,7 +374,19 @@ SyncManager.registerHandler("invoices", async (operationType, payload) => {
     id,
     order_id: payload["orderId"],
     invoice_number: payload["invoiceNumber"],
+    customer_id: payload["customerId"] || null,
     amount: payload["amount"] ?? payload["amountDue"] ?? 0,
+    amount_due: payload["amountDue"] ?? payload["amount"] ?? 0,
+    due_date: payload["dueDate"]
+      ? new Date(Number(payload["dueDate"])).toISOString()
+      : null,
+    status: payload["status"] || "unpaid",
+    created_at: payload["createdAt"]
+      ? new Date(Number(payload["createdAt"])).toISOString()
+      : new Date().toISOString(),
+    updated_at: payload["updatedAt"]
+      ? new Date(Number(payload["updatedAt"])).toISOString()
+      : new Date().toISOString(),
     issued_at: new Date(Number(payload["issuedAt"] || payload["createdAt"] || Date.now())).toISOString(),
   }, { onConflict: "id" });
   if (!error) await markLocalSynced(db.invoices, id);

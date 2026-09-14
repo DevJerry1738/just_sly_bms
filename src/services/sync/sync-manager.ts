@@ -1,5 +1,5 @@
 import { SyncQueueService } from "./sync-queue";
-import type { EntitySyncHandler, SyncResult } from "./types";
+import type { EntitySyncHandler, SyncQueueItem, SyncResult } from "./types";
 
 export class SyncManager {
   private static handlers = new Map<string, EntitySyncHandler>();
@@ -25,6 +25,18 @@ export class SyncManager {
     this.listeners.forEach((listener) => listener(event, data));
   }
 
+  private static getDependencyEntityType(entityType: string): string | undefined {
+    if (["sale_items", "sale_payments", "sale_voids"].includes(entityType)) return "sales";
+    if ([
+      "wholesale_order_items",
+      "order_status_history",
+      "order_payments",
+      "payment_receipts",
+      "invoices",
+    ].includes(entityType)) return "wholesale_orders";
+    return undefined;
+  }
+
   /**
    * Process pending items in the SyncQueue, optionally limited to entity types.
    */
@@ -46,9 +58,28 @@ export class SyncManager {
 
     try {
       const pendingItems = await SyncQueueService.getPendingItems();
-      const items = entityTypes?.length
+      const dependencyItems = await SyncQueueService.getDependencyItems();
+      const dependencyState = new Map<string, SyncQueueItem["status"]>();
+      for (const candidate of dependencyItems) {
+        const parentEntityType = this.getDependencyEntityType(candidate.entityType) ?? candidate.entityType;
+        const key = `${parentEntityType}:${String(candidate.payload["id"])}`;
+        const existingStatus = dependencyState.get(key);
+        if (existingStatus === "pending" || existingStatus === "syncing") continue;
+        if (candidate.status === "pending" || candidate.status === "syncing") {
+          dependencyState.set(key, candidate.status);
+        } else if (candidate.status === "failed" || !existingStatus) {
+          dependencyState.set(key, candidate.status);
+        }
+      }
+      const items = (entityTypes?.length
         ? pendingItems.filter((item) => entityTypes.includes(item.entityType))
-        : pendingItems;
+        : pendingItems
+      ).sort((left, right) => {
+        const leftIsChild = Boolean(left.dependency);
+        const rightIsChild = Boolean(right.dependency);
+        if (leftIsChild !== rightIsChild) return leftIsChild ? 1 : -1;
+        return left.timestamp - right.timestamp;
+      });
 
       for (const item of items) {
         const handler = this.handlers.get(item.entityType);
@@ -62,23 +93,17 @@ export class SyncManager {
         }
 
         if (item.dependency) {
-          const dependencyPending = items.some(
-            (candidate) =>
-              candidate.id !== item.id &&
-              candidate.payload["id"] === item.dependency &&
-              ["pending", "syncing"].includes(candidate.status),
-          );
-          if (dependencyPending) continue;
+          const dependencyEntityType = this.getDependencyEntityType(item.entityType);
+          const dependencyKey = dependencyEntityType
+            ? `${dependencyEntityType}:${item.dependency}`
+            : item.dependency;
+          const dependencyStatus = dependencyState.get(dependencyKey);
+          if (dependencyStatus === "pending" || dependencyStatus === "syncing") continue;
 
-          const dependencyFailed = items.some(
-            (candidate) =>
-              candidate.id !== item.id &&
-              candidate.payload["id"] === item.dependency &&
-              candidate.status === "failed",
-          );
-          if (dependencyFailed) {
+          if (dependencyStatus === "failed") {
             const errorMessage = `Dependency ${item.dependency} failed; child record was not uploaded`;
             await SyncQueueService.updateStatus(item.id, "failed", errorMessage);
+            dependencyState.set(`${item.entityType}:${String(item.payload["id"])}`, "failed");
             failedCount++;
             errors.push({ itemId: item.id, error: errorMessage });
             continue;
@@ -92,6 +117,7 @@ export class SyncManager {
 
           if (res.success) {
             syncedCount++;
+            dependencyState.set(`${item.entityType}:${String(item.payload["id"])}`, "completed");
             await SyncQueueService.removeCompleted(item.id);
             this.emit("sync:progress", { itemId: item.id, status: "completed" });
           } else {
@@ -99,6 +125,7 @@ export class SyncManager {
             const errMsg = res.error ?? "Unknown sync handler error";
             errors.push({ itemId: item.id, error: errMsg });
             await SyncQueueService.updateStatus(item.id, "failed", errMsg);
+            dependencyState.set(`${item.entityType}:${String(item.payload["id"])}`, "failed");
             this.emit("sync:progress", { itemId: item.id, status: "failed", error: errMsg });
           }
         } catch (err: unknown) {
@@ -106,6 +133,7 @@ export class SyncManager {
           const errMsg = err instanceof Error ? err.message : String(err);
           errors.push({ itemId: item.id, error: errMsg });
           await SyncQueueService.updateStatus(item.id, "failed", errMsg);
+          dependencyState.set(`${item.entityType}:${String(item.payload["id"])}`, "failed");
           this.emit("sync:progress", { itemId: item.id, status: "failed", error: errMsg });
         }
       }
