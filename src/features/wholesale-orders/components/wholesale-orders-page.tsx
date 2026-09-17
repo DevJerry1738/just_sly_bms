@@ -305,13 +305,13 @@ export function WholesaleOrdersPage() {
                 </TabsList>
               </Tabs>
             </ScrollArea>
-            <div className="relative shrink-0">
+            <div className="relative w-full shrink-0 sm:w-56">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search orders…"
-                className="pl-9 w-56"
+                className="h-10 w-full pl-9"
               />
             </div>
           </div>
@@ -329,8 +329,9 @@ export function WholesaleOrdersPage() {
               <p className="text-sm">No orders found</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
+            <div className="overflow-x-auto overscroll-x-contain">
+              <Table className="min-w-[42rem]">
+                <TableHeader>
                 <TableRow>
                   <TableHead>Order #</TableHead>
                   <TableHead>Customer</TableHead>
@@ -340,8 +341,8 @@ export function WholesaleOrdersPage() {
                   <TableHead className="hidden lg:table-cell">Date</TableHead>
                   <TableHead className="w-16" />
                 </TableRow>
-              </TableHeader>
-              <TableBody>
+                </TableHeader>
+                <TableBody>
                 {filtered.map((row) => {
                   const cfg = STATUS_CONFIG[row.order.status];
                   const rCustomerName = row.customer?.businessName || row.customer?.contactName || "—";
@@ -380,8 +381,9 @@ export function WholesaleOrdersPage() {
                     </TableRow>
                   );
                 })}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

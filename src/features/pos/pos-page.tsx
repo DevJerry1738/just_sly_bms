@@ -268,7 +268,7 @@ export function PosPage() {
         <Badge variant="secondary">{activeBranch?.name ?? "No branch selected"}</Badge>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)] lg:gap-6">
         <div className="space-y-4">
           <ProductSearch value={query} onChange={setQuery} />
           <ProductGrid

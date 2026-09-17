@@ -246,3 +246,36 @@ The fix is complete only when all of the following are true:
   3. Open Browser B with a fresh profile against the same Supabase project.
   4. Sign in and trigger pull-sync, then inspect the wholesale tables in IndexedDB.
 - **Expected Result**: Browser B contains the order, items, status history, payment metadata, receipt metadata, and invoice data.
+
+## Mobile Responsive Validation
+
+### Test Case 6.1: Viewport and shell checks
+- **Objective**: Verify the shared shell remains usable on phone and tablet widths.
+- **Viewports**: 320x568, 375x667, 390x844, and 768x1024.
+- **Steps**:
+  1. Open the app in Chrome DevTools device emulation at each viewport.
+  2. Confirm there is no page-level horizontal scrollbar or clipped heading.
+  3. Open and close the navigation drawer, then navigate to another route.
+  4. Confirm the drawer closes, focus returns to the menu button, and the active route is visible.
+  5. Verify sync status, notifications, and account controls remain reachable from the phone top bar.
+- **Expected Result**: Content respects the safe area, the shell fits the viewport, and all primary navigation remains reachable.
+
+### Test Case 6.2: POS and wholesale touch workflows
+- **Objective**: Verify high-frequency transaction flows work with touch and a virtual keyboard.
+- **Steps**:
+  1. On a 375px viewport, search products and add multiple items to the POS cart.
+  2. Adjust quantity, change packaging, open checkout, and complete or cancel the dialog.
+  3. Open wholesale orders, filter status, search by order number, and open order details.
+  4. In the portal, open the shop, add an item, review orders, and open receipt upload.
+  5. Confirm dialogs scroll internally and their actions remain visible above the safe-area/keyboard region.
+- **Expected Result**: Inputs do not zoom unexpectedly, buttons are easy to tap, and no workflow requires desktop-only hover or precision scrolling.
+
+### Test Case 6.3: Responsive data and offline behavior
+- **Objective**: Verify dense data views and offline feedback remain usable on small screens.
+- **Steps**:
+  1. Open customers, products, sales, inventory, users, audit logs, and reports at 320px and 390px widths.
+  2. Confirm table scrolling is contained inside the table region and does not widen the page.
+  3. Toggle the browser offline, create a POS or wholesale mutation, and inspect the sync status control.
+  4. Reconnect and trigger sync from the mobile control.
+  5. Repeat with dark theme and reduced-motion enabled.
+- **Expected Result**: Primary fields and actions remain visible, queue status is understandable, and the page does not shift or clip during sync.

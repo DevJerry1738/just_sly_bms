@@ -21,12 +21,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-surface">
+      <div className="flex min-h-dvh w-full overflow-x-clip bg-surface">
         <AppSidebar />
         <SidebarInset className="min-w-0 bg-surface">
           <OfflineBanner />
           <AppTopbar />
-          <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 sm:px-6 lg:px-8 animate-fade-in">{children}</main>
+          <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-6 sm:py-6 lg:px-8 animate-fade-in">{children}</main>
         </SidebarInset>
         <PWAUpdateToast />
       </div>

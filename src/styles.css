@@ -267,6 +267,9 @@
   }
 
   html {
+    min-width: 320px;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -274,6 +277,10 @@
   }
 
   body {
+    min-width: 320px;
+    min-height: 100dvh;
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
@@ -282,6 +289,15 @@
     /* Inter's optical features */
     font-feature-settings: "cv02", "cv03", "cv04", "ss01";
     font-variation-settings: "opsz" 32;
+  }
+
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
   }
 
   /* Typography scale — restrained and purposeful */
@@ -355,6 +371,14 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
   }
 }
 

@@ -22,7 +22,7 @@ export function CartPane({
   total,
 }: CartPaneProps) {
   return (
-    <Card className="h-full flex flex-col justify-between">
+    <Card className="flex max-h-[calc(100dvh-8rem)] min-h-0 flex-col justify-between lg:sticky lg:top-20 lg:h-[calc(100dvh-6rem)]">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Cart</span>
@@ -31,13 +31,13 @@ export function CartPane({
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4 flex-1 flex flex-col justify-between overflow-y-auto">
+      <CardContent className="flex min-h-0 flex-1 flex-col justify-between space-y-4 overflow-y-auto">
         {items.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
             No items in cart. Select a product to begin.
           </div>
         ) : (
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+          <div className="max-h-[42dvh] space-y-3 overflow-y-auto pr-1 lg:max-h-none">
             {items.map((item) => {
               const itemSubtotal = item.unitPrice * item.quantity;
               const hasPackaging = item.availablePackaging && item.availablePackaging.length > 0;

@@ -39,14 +39,14 @@ export function AppTopbar() {
   const navigate = useNavigate();
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
-      <SidebarTrigger className="size-8" aria-label="Toggle sidebar" />
+    <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b bg-background/85 px-3 py-2 pl-[calc(0.75rem+env(safe-area-inset-left))] pr-[calc(0.75rem+env(safe-area-inset-right))] backdrop-blur-md supports-[backdrop-filter]:bg-background/70 sm:gap-3 sm:px-4">
+      <SidebarTrigger className="size-9 shrink-0" aria-label="Toggle sidebar" />
       <Separator orientation="vertical" className="hidden h-4 sm:block" />
-      <div className="hidden min-w-0 flex-1 md:block">
+      <div className="min-w-0 flex-1 md:block">
         <AppBreadcrumb />
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
         <div className="relative hidden lg:block">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -58,12 +58,18 @@ export function AppTopbar() {
         </div>
 
         <SyncStatusIndicator />
-        <PWAInstallButton />
-        <BranchSwitcher />
+        <div className="hidden sm:block">
+          <PWAInstallButton />
+        </div>
+        <div className="hidden md:block">
+          <BranchSwitcher />
+        </div>
 
         <NotificationBell />
 
-        <ThemeToggle />
+        <div className="hidden sm:block">
+          <ThemeToggle />
+        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

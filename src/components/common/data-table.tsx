@@ -81,10 +81,10 @@ export function DataTable<TData>({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
+      <div className="flex flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           {enableSearch ? (
-            <div className="relative min-w-48 max-w-72 flex-1">
+            <div className="relative min-w-0 max-w-none flex-1 sm:min-w-48 sm:max-w-72">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={globalFilter}
@@ -98,7 +98,7 @@ export function DataTable<TData>({
           {toolbar}
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
           {selectedCount > 0 ? (
             <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md">
               {selectedCount} selected
@@ -138,50 +138,52 @@ export function DataTable<TData>({
         ) : table.getRowModel().rows.length === 0 ? (
           <EmptyState title={emptyTitle} description={emptyDescription} className="border-0 bg-transparent py-10" />
         ) : (
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id} className="hover:bg-transparent">
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                        <button
-                          type="button"
-                          onClick={header.column.getToggleSortingHandler()}
-                          className="inline-flex items-center gap-1 hover:text-foreground transition-colors"
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          <ArrowUpDown className="size-3 opacity-60" />
-                        </button>
-                      ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
-                      )}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto overscroll-x-contain">
+            <Table className="min-w-[40rem]">
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id} className="hover:bg-transparent">
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id}>
+                        {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                          <button
+                            type="button"
+                            onClick={header.column.getToggleSortingHandler()}
+                            className="inline-flex min-h-9 items-center gap-1 hover:text-foreground transition-colors"
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            <ArrowUpDown className="size-3 opacity-60" />
+                          </button>
+                        ) : (
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        )}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows.map((row) => (
+                  <TableRow key={row.id} data-state={row.getIsSelected() ? "selected" : undefined}>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3 px-1">
+      <div className="flex flex-col items-start justify-between gap-2 px-1 sm:flex-row sm:items-center">
         <p className="text-xs text-muted-foreground">
           Showing <span className="font-medium text-foreground">{table.getRowModel().rows.length}</span> of{" "}
           <span className="font-medium text-foreground">{table.getFilteredRowModel().rows.length}</span> rows
         </p>
-        <div className="flex items-center gap-1.5">
+        <div className="flex w-full items-center justify-between gap-1.5 sm:w-auto sm:justify-end">
           <Button
             variant="outline"
             size="xs"
