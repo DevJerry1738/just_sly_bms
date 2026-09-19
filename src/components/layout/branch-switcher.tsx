@@ -26,11 +26,11 @@ export function BranchSwitcher() {
         variant="outline"
         size="sm"
         disabled
-        className="h-8 gap-2 px-2.5 text-xs font-normal bg-card border-border/80 opacity-100"
+        className="h-9 gap-2 px-2.5 text-xs font-normal bg-card border-border/80 opacity-100 max-sm:size-9 max-sm:px-0"
         aria-label={`Active branch: ${branches[0].name}`}
       >
         <Building2 className="size-3.5 text-primary shrink-0" />
-        <span className="max-w-36 truncate font-semibold text-foreground">{branches[0].name}</span>
+        <span className="max-w-36 truncate font-semibold text-foreground max-sm:hidden">{branches[0].name}</span>
       </Button>
     );
   }
@@ -41,14 +41,14 @@ export function BranchSwitcher() {
         <Button
           variant="outline"
           size="sm"
-          className="h-8 gap-2 px-2.5 text-xs font-normal bg-card hover:bg-accent border-border/80"
+          className="h-9 gap-2 px-2.5 text-xs font-normal bg-card hover:bg-accent border-border/80 max-sm:size-9 max-sm:px-0"
           aria-label="Select active branch"
         >
           <Building2 className="size-3.5 text-primary shrink-0" />
-          <span className="max-w-36 truncate font-semibold text-foreground">
+          <span className="max-w-36 truncate font-semibold text-foreground max-sm:hidden">
             {activeBranch ? activeBranch.name : "All Branches"}
           </span>
-          <ChevronsUpDown className="size-3 text-muted-foreground opacity-70 shrink-0 ml-auto" />
+          <ChevronsUpDown className="size-3 text-muted-foreground opacity-70 shrink-0 ml-auto max-sm:hidden" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">

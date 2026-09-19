@@ -61,7 +61,7 @@ export function AppTopbar() {
         <div className="hidden sm:block">
           <PWAInstallButton />
         </div>
-        <div className="hidden md:block">
+        <div className="block">
           <BranchSwitcher />
         </div>
 
