@@ -1,35 +1,13 @@
 import { db } from "@/database/schema";
 import type { InventoryBalanceSchema, ProductSchema } from "@/database/schema";
 import { branchRepository } from "./branch.repository";
-import { productRepository } from "./product.repository";
 
 export class InventoryBalanceRepository {
   async ensureSeedBalances(branchId?: string): Promise<InventoryBalanceSchema[]> {
-    const targetBranchId = branchId || (await branchRepository.ensureSeedBranches()).find((b) => b.status === "active")?.id || "branch-hq-lagos";
+    const targetBranchId = branchId || (await branchRepository.getActiveBranches())[0]?.id;
+    if (!targetBranchId) return [];
     const existing = await db.inventory_balances.where("branchId").equals(targetBranchId).toArray();
-    if (existing.length > 0) return existing;
-
-    const products = (await productRepository.getAll()).filter((p) => p.status === "active");
-    if (products.length === 0) return [];
-
-    const now = Date.now();
-    const records: InventoryBalanceSchema[] = products.map((product) => ({
-      id: `${product.id}::${targetBranchId}`,
-      productId: product.id,
-      branchId: targetBranchId,
-      quantityOnHand: Math.max(10, product.lowStockThreshold + 3),
-      reservedQuantity: 0,
-      incomingQuantity: 0,
-      valuationMethod: "fifo",
-      totalCostValue: Number(product.costPrice) * 10,
-      weightedAvgCost: Number(product.costPrice),
-      lastTransactionId: `seed-${product.id}`,
-      updatedAt: now,
-      sync_status: "synced",
-    }));
-
-    await db.inventory_balances.bulkPut(records);
-    return records;
+    return existing;
   }
   /** Get balance for a specific product/branch combo. */
   async getBalance(

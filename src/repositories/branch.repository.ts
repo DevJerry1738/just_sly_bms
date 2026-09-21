@@ -18,74 +18,16 @@ export class BranchRepository extends BaseRepository<BranchSchema> {
   /**
    * Fetch the designated HQ branch.
    */
-  async getHqBranch(): Promise<BranchSchema> {
-    const branches = await this.ensureSeedBranches();
+  async getHqBranch(): Promise<BranchSchema | undefined> {
+    const branches = await this.getAll();
     const hq = branches.find((b) => b.isHq || b.code?.startsWith("HQ") || b.id === "branch-hq-lagos");
     if (hq) return hq;
     return branches[0];
   }
 
-  /**
-   * Initialize default seed branches if none exist in local storage.
-   */
+  /** Return locally cached branches without creating demo branches. */
   async ensureSeedBranches(): Promise<BranchSchema[]> {
-    const existing = await this.getAll();
-    if (existing.length > 0) return existing;
-
-    const seedBranches: BranchSchema[] = [
-      {
-        id: "branch-hq-lagos",
-        code: "HQ-001",
-        name: "Lagos Central Flagship (HQ)",
-        isHq: true,
-        organizationId: "default-org-001",
-        email: "lagos@justsly.com",
-        phone: "+234 1 700 0001",
-        address: "123 Ozumba Mbadiwe Avenue",
-        city: "Lagos",
-        state: "Lagos State",
-        country: "Nigeria",
-        timezone: "Africa/Lagos",
-        currency: "NGN",
-        receiptPrefix: "HQ-LAG-",
-        lowStockThreshold: 15,
-        status: "active",
-        openingDate: "2024-01-15",
-        notes: "Main distribution hub and executive office.",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        syncVersion: 1,
-        sync_status: "synced",
-      },
-      {
-        id: "branch-kano-north",
-        code: "KNO-002",
-        name: "Kano North Branch",
-        organizationId: "default-org-001",
-        email: "kano@justsly.com",
-        phone: "+234 64 300 0002",
-        address: "45 Zaria Road",
-        city: "Kano",
-        state: "Kano State",
-        country: "Nigeria",
-        timezone: "Africa/Lagos",
-        currency: "NGN",
-        receiptPrefix: "KNO-02-",
-        lowStockThreshold: 10,
-        status: "active",
-        openingDate: "2024-06-01",
-        notes: "Retail POS and wholesale regional depot.",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        syncVersion: 1,
-        sync_status: "synced",
-      },
-    ];
-
-    for (const b of seedBranches) {
-      await db.branches.put(b);
-    }
-    return seedBranches;
+    return this.getAll();
   }
 
   /**

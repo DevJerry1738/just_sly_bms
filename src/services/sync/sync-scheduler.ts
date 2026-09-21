@@ -53,25 +53,10 @@ export class SyncScheduler {
       // 0. Ensure default organization exists in Supabase first to satisfy foreign key constraints
       const { data: remoteOrgs } = await client.from("organizations").select("id");
       const remoteOrgIds = new Set((remoteOrgs || []).map((o: any) => o.id));
-      let localOrgs = await db.organizations.toArray();
-
-      if (localOrgs.length === 0) {
-        const defaultOrg = {
-          id: "default-org-001",
-          name: "Just Sly Enterprise",
-          code: "ORG-001",
-          tax_id: "TIN-98472910-NG",
-          currency: "NGN",
-          is_multi_branch_enabled: true,
-          updated_at: Date.now(),
-          sync_status: "synced" as const,
-        };
-        await db.organizations.put(defaultOrg as any);
-        localOrgs = [defaultOrg as any];
-      }
+      const localOrgs = await db.organizations.toArray();
 
       for (const org of localOrgs) {
-        if (!remoteOrgIds.has(org.id)) {
+        if (org.sync_status === "pending" && !remoteOrgIds.has(org.id)) {
           await client.from("organizations").upsert(
             {
               id: org.id,
@@ -96,7 +81,7 @@ export class SyncScheduler {
         const remoteBranchIds = new Set((remoteBranches || []).map((b: any) => b.id));
         const localBranches = await db.branches.toArray();
         for (const branch of localBranches) {
-          if (!remoteBranchIds.has(branch.id)) {
+          if (branch.sync_status === "pending" && !remoteBranchIds.has(branch.id)) {
             const { error: upsertErr } = await client.from("branches").upsert(
               {
                 id: branch.id,
@@ -139,7 +124,7 @@ export class SyncScheduler {
         const remoteStaffIds = new Set((remoteStaff || []).map((s: any) => s.id));
         const localStaff = await db.staff.toArray();
         for (const member of localStaff) {
-          if (!queuedIds.has(member.id) && !remoteStaffIds.has(member.id)) {
+          if (member.sync_status === "pending" && !queuedIds.has(member.id) && !remoteStaffIds.has(member.id)) {
             await SyncQueueService.enqueue("staff", "UPSERT", member as unknown as Record<string, unknown>);
           }
         }
@@ -167,7 +152,7 @@ export class SyncScheduler {
         for (const record of await table.toArray()) {
           const id = record["id"] as string;
           if (queuedIds.has(id)) continue;
-          if (record["sync_status"] === "pending" || !remoteIds.has(id)) {
+          if (record["sync_status"] === "pending" && !remoteIds.has(id)) {
             const dependency = (record["saleId"] || record["orderId"]) as string | undefined;
             await SyncQueueService.enqueue(entityType, "UPSERT", record, {
               dependency,
@@ -201,18 +186,25 @@ export class SyncScheduler {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     try {
+      const purgeMissingSynced = async (
+        table: { toArray: () => Promise<Array<{ id: string; sync_status?: string }>>; delete: (id: string) => Promise<unknown> },
+        remoteIds: Set<string>,
+      ) => {
+        for (const localRecord of await table.toArray()) {
+          const hasLocalWork = ["pending", "syncing", "error"].includes(localRecord.sync_status ?? "");
+          if (!hasLocalWork && !remoteIds.has(localRecord.id)) {
+            await table.delete(localRecord.id);
+          }
+        }
+      };
+
       // 1. Pull branches
       const { data: remoteBranches, error: bErr } = await client.from("branches").select("*");
       if (!bErr && remoteBranches) {
         const remoteBranchIds = new Set(remoteBranches.map((b: any) => b.id));
 
         // Remove local branches that were deleted in Supabase
-        const localBranches = await db.branches.toArray();
-        for (const lb of localBranches) {
-          if (lb.sync_status === "synced" && !remoteBranchIds.has(lb.id)) {
-            await db.branches.delete(lb.id);
-          }
-        }
+        await purgeMissingSynced(db.branches, remoteBranchIds);
 
         // Put remote branches into local DB
         for (const rb of remoteBranches) {
@@ -244,24 +236,12 @@ export class SyncScheduler {
         }
       }
 
-      // 2. Pull profiles & staff to synchronize user deletions from Supabase Dashboard
-      const [{ data: remoteProfiles }, { data: remoteStaff, error: sErr }] = await Promise.all([
-        client.from("profiles").select("id"),
-        client.from("staff").select("*"),
-      ]);
-
-      const validAuthUserIds = new Set((remoteProfiles || []).map((p: any) => p.id));
+      // 2. Pull staff and synchronize the directory from public.staff.
+      const { data: remoteStaff, error: sErr } = await client.from("staff").select("*");
       const validStaffIds = new Set((remoteStaff || []).map((s: any) => s.id));
 
-      const localStaff = await db.staff.toArray();
-      for (const localMember of localStaff) {
-        // If user was deleted from Supabase Auth/Profiles OR deleted from public.staff
-        const isAuthDeleted = localMember.authUserId && !validAuthUserIds.has(localMember.authUserId);
-        const isStaffDeleted = localMember.sync_status === "synced" && !validStaffIds.has(localMember.id) && Array.isArray(remoteStaff);
-
-        if (isAuthDeleted || isStaffDeleted) {
-          await db.staff.delete(localMember.id);
-        }
+      if (!sErr && remoteStaff) {
+        await purgeMissingSynced(db.staff, validStaffIds);
       }
 
       // Upsert remote staff into local DB
@@ -310,6 +290,10 @@ export class SyncScheduler {
       // 4. Pull products
       const { data: remoteProducts, error: prodErr } = await client.from("products").select("*");
       if (!prodErr && remoteProducts) {
+        await purgeMissingSynced(
+          db.products,
+          new Set(remoteProducts.map((product: any) => product.id)),
+        );
         for (const rp of remoteProducts) {
           const existingProduct = await db.products.get(rp.id);
           const preservedCode = existingProduct?.code || rp.code || rp.sku || rp.id;
@@ -373,6 +357,10 @@ export class SyncScheduler {
         .from("customer_accounts")
         .select("*");
       if (!customerErr && remoteCustomers) {
+        await purgeMissingSynced(
+          db.customer_accounts,
+          new Set(remoteCustomers.map((customer: any) => customer.id)),
+        );
         for (const row of remoteCustomers) {
           await putRemote(db.customer_accounts, {
             id: row.id,
@@ -399,6 +387,10 @@ export class SyncScheduler {
         .from("sales_normalized")
         .select("*");
       if (!salesErr && remoteSales) {
+        await purgeMissingSynced(
+          db.sales,
+          new Set(remoteSales.map((sale: any) => sale.id)),
+        );
         for (const row of remoteSales) {
           await putRemote(db.sales, {
             id: row.id,
@@ -632,6 +624,10 @@ export class SyncScheduler {
       // 7. Pull inventory balances
       const { data: remoteBalances, error: balErr } = await client.from("inventory_balances").select("*");
       if (!balErr && remoteBalances) {
+        await purgeMissingSynced(
+          db.inventory_balances,
+          new Set(remoteBalances.map((balance: any) => balance.id)),
+        );
         for (const rb of remoteBalances) {
           await db.inventory_balances.put({
             id: rb.id,

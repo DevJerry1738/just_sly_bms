@@ -3,8 +3,6 @@ import { db, type ProductSchema } from "@/database/schema";
 import { DomainEvents } from "@/services/events/domain-events";
 import { priceHistoryRepository } from "./price-history.repository";
 import { productPackagingRepository } from "./product-packaging.repository";
-import { categoryRepository } from "./category.repository";
-import { unitOfMeasureRepository } from "./unit-of-measure.repository";
 import type { ProductPackagingSchema } from "@/database/schema";
 
 // ---------------------------------------------------------------------------
@@ -70,58 +68,6 @@ export class ProductRepository extends BaseRepository<ProductSchema> {
   }
 
   async ensureSeedProducts(): Promise<ProductSchema[]> {
-    const existing = await db.products.count();
-    if (existing === 0) {
-      await categoryRepository.ensureSeedCategories();
-      await unitOfMeasureRepository.ensureSeedUnits();
-
-      const now = Date.now();
-      const records: ProductSchema[] = [
-        {
-          id: "prod-demo-001",
-          code: "JSP-0001",
-          sku: "SKU-001",
-          barcode: "750000000001",
-          name: "Starter Pack",
-          description: "Sample starter product for demo inventory",
-          categoryId: "cat-consumables",
-          brand: "Just Sly",
-          baseUnit: "Piece",
-          trackExpiry: false,
-          lowStockThreshold: 5,
-          costPrice: 1200,
-          retailPrice: 1500,
-          wholesalePrice: 1350,
-          supplyPrice: 1250,
-          status: "active",
-          createdAt: now,
-          updatedAt: now,
-          sync_status: "synced",
-        },
-        {
-          id: "prod-demo-002",
-          code: "JSP-0002",
-          sku: "SKU-002",
-          barcode: "750000000002",
-          name: "Daily Essentials",
-          description: "Sample product for inventory visibility",
-          categoryId: "cat-general",
-          brand: "Just Sly",
-          baseUnit: "Piece",
-          trackExpiry: false,
-          lowStockThreshold: 8,
-          costPrice: 800,
-          retailPrice: 1000,
-          wholesalePrice: 900,
-          supplyPrice: 850,
-          status: "active",
-          createdAt: now,
-          updatedAt: now,
-          sync_status: "synced",
-        },
-      ];
-      await db.products.bulkPut(records);
-    }
     return db.products.toArray();
   }
 

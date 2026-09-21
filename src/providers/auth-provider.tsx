@@ -75,11 +75,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         setProfile((profileRes.data as Profile | null) ?? null);
 
-        let fetchedRoles = ((rolesRes.data ?? []) as { role: AppRole }[]).map((r) => r.role);
+        const normalizeRole = (role: unknown): AppRole | undefined => {
+          switch (role) {
+            case "admin":
+            case "super_admin":
+            case "role-super-admin":
+              return "admin";
+            case "manager":
+            case "branch_manager":
+            case "role-branch-manager":
+              return "manager";
+            case "staff":
+            case "sales_staff":
+            case "inventory_staff":
+            case "role-sales-staff":
+            case "role-inventory-staff":
+              return "staff";
+            case "viewer":
+              return "viewer";
+            default:
+              return undefined;
+          }
+        };
+
+        let fetchedRoles = ((rolesRes.data ?? []) as { role: unknown }[])
+          .map((roleRow) => normalizeRole(roleRow.role))
+          .filter((role): role is AppRole => Boolean(role));
         
-        // Sanity check: If user_metadata or staff record defines role as "staff" or "manager",
-        // prevent unwanted "admin" role resolution from orphaned user_roles records
-        const metaRole = session?.user?.user_metadata?.role as AppRole | undefined;
+        // Auth roles are canonical. Staff metadata is only a fallback for legacy accounts.
+        const metaRole = normalizeRole(session?.user?.user_metadata?.role);
         let staffRecord =
           (await staffRepository.getByAuthUserId(userId)) ||
           (session?.user?.email ? await staffRepository.getByEmail(session.user.email) : undefined);
@@ -99,23 +123,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        const isExplicitStaff =
-          metaRole === "staff" ||
-          metaRole === "manager" ||
-          staffRecord?.role === "staff" ||
-          staffRecord?.role === "sales_staff" ||
-          staffRecord?.role === "inventory_staff" ||
-          staffRecord?.role === "role-sales-staff" ||
-          staffRecord?.role === "role-inventory-staff";
-
-        if (isExplicitStaff) {
-          fetchedRoles = [metaRole === "manager" ? "manager" : "staff"];
-        } else if (fetchedRoles.length === 0) {
+        if (fetchedRoles.length === 0) {
           if (metaRole) {
             fetchedRoles = [metaRole];
-          } else if (staffRecord?.role) {
-            fetchedRoles = [staffRecord.role as AppRole];
           } else {
+            const staffRole = normalizeRole(staffRecord?.role);
+            if (staffRole) fetchedRoles = [staffRole];
+          }
+          if (fetchedRoles.length === 0) {
             fetchedRoles = ["staff"];
           }
         }

@@ -10,6 +10,68 @@ This document outlines the step-by-step procedures for manually testing and veri
 2. **Browser Tools**: Open Chrome DevTools (`F12` or `Ctrl + Shift + I`).
 3. **Storage Access**: Open **Application > Storage > IndexedDB > JustSlySuiteDB**.
 
+## Clean-Slate Demo Reset
+
+Use this before recording a setup-from-scratch demo. It preserves the administrator login but removes business data. Run it only against the dedicated demo Supabase project.
+
+### 1. Clear business data in Supabase
+
+Run this in the Supabase SQL Editor. The existence check is intentional because some deployments do not contain every optional table.
+
+```sql
+DO $$
+DECLARE
+  target_table text;
+BEGIN
+  FOREACH target_table IN ARRAY ARRAY[
+    'user_permission_overrides', 'notifications', 'audit_logs',
+    'payment_receipts', 'invoices', 'order_payments', 'order_status_history',
+    'wholesale_order_items', 'wholesale_orders', 'sale_voids', 'sale_payments',
+    'sale_items', 'sales_normalized', 'customer_accounts', 'customers',
+    'sales', 'orders', 'inventory_balances', 'inventory_transactions',
+    'inventory_adjustments', 'inventory_alerts', 'stock_count_items',
+    'stock_count_sessions', 'inventory_batches', 'inventory_reservations',
+    'inventory_transfer_batches', 'inventory_transfer_items',
+    'inventory_transfers', 'transfer_status_history', 'inventory',
+    'product_packaging', 'products', 'categories', 'units_of_measure',
+    'staff', 'branches', 'organizations', 'user_preferences'
+  ] LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = target_table
+    ) THEN
+      EXECUTE format('TRUNCATE TABLE public.%I RESTART IDENTITY CASCADE', target_table);
+    END IF;
+  END LOOP;
+END $$;
+```
+
+Do not truncate `auth.users` or `profiles`; the preserved administrator must remain able to sign in. Verify that the administrator still has an `admin` row in `public.user_roles`.
+
+### 2. Clear this browser
+
+In the app's browser console, run:
+
+```js
+await navigator.serviceWorker.getRegistrations().then((registrations) =>
+  Promise.all(registrations.map((registration) => registration.unregister()))
+);
+await caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+localStorage.clear();
+sessionStorage.clear();
+await new Promise((resolve, reject) => {
+  const request = indexedDB.deleteDatabase("JustSlySuiteDB");
+  request.onsuccess = resolve;
+  request.onerror = () => reject(request.error);
+  request.onblocked = resolve;
+});
+location.reload();
+```
+
+### 3. Expected clean state
+
+After signing in again, the administrator should see **Branches** and **Staff** in the navigation. The following should be empty until created manually: organization details, branches, staff, customers, products, sales, wholesale orders, and inventory balances. System permissions, roles, units, and categories may remain available as setup metadata.
+
 ---
 
 ## Test Suite 1: Authentication (`Epic 1`)
