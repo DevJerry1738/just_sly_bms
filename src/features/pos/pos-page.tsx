@@ -6,16 +6,21 @@ import { productRepository } from "@/repositories/product.repository";
 import { productPackagingRepository } from "@/repositories/product-packaging.repository";
 import { saleItemsRepository } from "@/repositories/sale-items.repository";
 import { db } from "@/database/schema";
-import type { SalesSchema, SaleItemSchema, OrganizationSchema } from "@/database/schema";
+import type { SalesSchema, SaleItemSchema, OrganizationSchema, HeldCartSchema } from "@/database/schema";
 import { SyncManager } from "@/services/sync/sync-manager";
 import { ProductSearch } from "@/features/pos/components/product-search";
 import { ProductGrid } from "@/features/pos/components/product-grid";
 import { CartPane } from "@/features/pos/components/cart-pane";
 import { CheckoutModal } from "@/features/pos/components/checkout-modal";
 import { ReceiptView } from "@/features/pos/components/receipt-view";
+import { HoldCartDialog } from "@/features/pos/components/hold-cart-dialog";
+import { HeldCartsModal } from "@/features/pos/components/held-carts-modal";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { posService, type PosCartItem } from "@/services/pos/pos.service";
+import { heldCartService } from "@/services/pos/held-cart.service";
+import { Clock } from "lucide-react";
 
 export function PosPage() {
   const { user } = useAuth();
@@ -26,6 +31,11 @@ export function PosPage() {
   const [cart, setCart] = useState<PosCartItem[]>([]);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Held Cart states
+  const [heldCarts, setHeldCarts] = useState<HeldCartSchema[]>([]);
+  const [holdDialogOpen, setHoldDialogOpen] = useState(false);
+  const [heldCartsModalOpen, setHeldCartsModalOpen] = useState(false);
 
   // Completed sale state for receipt modal
   const [completedSale, setCompletedSale] = useState<SalesSchema | null>(null);
@@ -44,22 +54,37 @@ export function PosPage() {
     }
   }, []);
 
+  const loadHeldCarts = useCallback(async () => {
+    if (!activeBranch?.id) {
+      setHeldCarts([]);
+      return;
+    }
+    try {
+      const carts = await heldCartService.getHeldCarts(activeBranch.id);
+      setHeldCarts(carts);
+    } catch (error) {
+      console.error("Failed to load held carts:", error);
+    }
+  }, [activeBranch?.id]);
+
   useEffect(() => {
     void loadProducts();
+    void loadHeldCarts();
     // Load organization for receipt header/footer
     db.organizations.toArray().then((orgs) => {
       if (orgs.length > 0) setOrganization(orgs[0]);
     }).catch(console.error);
-  }, [loadProducts]);
+  }, [loadProducts, loadHeldCarts]);
 
   useEffect(() => {
     const unsubscribe = SyncManager.subscribe((event) => {
       if (event === "sync:complete") {
         void loadProducts();
+        void loadHeldCarts();
       }
     });
     return unsubscribe;
-  }, [loadProducts]);
+  }, [loadProducts, loadHeldCarts]);
 
   const filteredProducts = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -258,6 +283,60 @@ export function PosPage() {
     }
   };
 
+  const handleHoldCartConfirm = async (referenceLabel: string, notes?: string) => {
+    if (!activeBranch?.id || !user?.id) {
+      toast.error("Branch and active user are required to hold a transaction.");
+      return;
+    }
+    if (cart.length === 0) {
+      toast.error("Cart is empty.");
+      return;
+    }
+
+    try {
+      const held = await heldCartService.holdCart({
+        branchId: activeBranch.id,
+        heldByUserId: user.id,
+        heldByUserName: user.fullName ?? user.email ?? user.id,
+        items: cart,
+        referenceLabel,
+        notes,
+      });
+
+      setCart([]);
+      await loadHeldCarts();
+      toast.success(`Transaction parked as "${held.referenceLabel}".`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to hold transaction.");
+    }
+  };
+
+  const handleResumeCart = async (heldCart: HeldCartSchema) => {
+    if (!activeBranch?.id) return;
+    try {
+      const result = await heldCartService.resumeHeldCart(heldCart.id, activeBranch.id);
+      setCart(result.cart);
+      await loadHeldCarts();
+
+      if (result.warnings.length > 0) {
+        result.warnings.forEach((warning) => toast.warning(warning, { duration: 6000 }));
+      }
+      toast.success(`Resumed transaction "${heldCart.referenceLabel}".`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to resume transaction.");
+    }
+  };
+
+  const handleDiscardCart = async (heldCartId: string) => {
+    try {
+      await heldCartService.deleteHeldCart(heldCartId);
+      await loadHeldCarts();
+      toast.success("Held transaction discarded.");
+    } catch (error) {
+      toast.error("Failed to discard held transaction.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -265,7 +344,26 @@ export function PosPage() {
           <h1 className="text-2xl font-semibold">Retail POS</h1>
           <p className="text-sm text-muted-foreground">Fast checkout for today’s transactions.</p>
         </div>
-        <Badge variant="secondary">{activeBranch?.name ?? "No branch selected"}</Badge>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setHeldCartsModalOpen(true)}
+            className="relative gap-1.5 h-8 border-dashed hover:border-amber-500 hover:text-amber-600 transition-colors"
+          >
+            <Clock className="h-4 w-4 text-amber-500" />
+            <span>Held Carts</span>
+            {heldCarts.length > 0 && (
+              <Badge
+                variant="secondary"
+                className="ml-1 px-1.5 py-0 text-xs bg-amber-500 text-white hover:bg-amber-600"
+              >
+                {heldCarts.length}
+              </Badge>
+            )}
+          </Button>
+          <Badge variant="secondary">{activeBranch?.name ?? "No branch selected"}</Badge>
+        </div>
       </div>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)] lg:gap-6">
@@ -284,9 +382,27 @@ export function PosPage() {
           onUpdateQuantity={(id, qty) => void updateCartQuantity(id, qty)}
           onUpdateUnit={(id, label) => void updateCartUnit(id, label)}
           onCheckout={() => setCheckoutOpen(true)}
+          onHoldCart={() => setHoldDialogOpen(true)}
           total={total}
         />
       </div>
+
+      <HoldCartDialog
+        open={holdDialogOpen}
+        onOpenChange={setHoldDialogOpen}
+        items={cart}
+        subtotal={total}
+        onConfirm={handleHoldCartConfirm}
+      />
+
+      <HeldCartsModal
+        open={heldCartsModalOpen}
+        onOpenChange={setHeldCartsModalOpen}
+        heldCarts={heldCarts}
+        onResume={handleResumeCart}
+        onDiscard={handleDiscardCart}
+        hasActiveCartItems={cart.length > 0}
+      />
 
       <CheckoutModal
         open={checkoutOpen}

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import type { PosCartItem } from "@/services/pos/pos.service";
-import { Trash2, Plus, Minus, Layers } from "lucide-react";
+import { Trash2, Plus, Minus, Layers, PauseCircle } from "lucide-react";
 
 interface CartPaneProps {
   items: PosCartItem[];
@@ -10,6 +10,7 @@ interface CartPaneProps {
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onUpdateUnit: (productId: string, packagingLabel?: string) => void;
   onCheckout: () => void;
+  onHoldCart?: () => void;
   total: number;
 }
 
@@ -19,16 +20,32 @@ export function CartPane({
   onUpdateQuantity,
   onUpdateUnit,
   onCheckout,
+  onHoldCart,
   total,
 }: CartPaneProps) {
   return (
     <Card className="flex max-h-[calc(100dvh-8rem)] min-h-0 flex-col justify-between lg:sticky lg:top-20 lg:h-[calc(100dvh-6rem)]">
-      <CardHeader>
+      <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between">
-          <span>Cart</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            {items.length} {items.length === 1 ? "item" : "items"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span>Cart</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              {items.length} {items.length === 1 ? "item" : "items"}
+            </span>
+          </div>
+          {onHoldCart && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onHoldCart}
+              disabled={items.length === 0}
+              className="h-8 gap-1.5 text-xs text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-800 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+              title="Hold this transaction to attend to next customer"
+            >
+              <PauseCircle className="h-3.5 w-3.5" />
+              Hold Cart
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col justify-between space-y-4 overflow-y-auto">
