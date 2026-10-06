@@ -8,7 +8,7 @@ export class OrganizationRepository extends BaseRepository<OrganizationSchema> {
     super("organizations", db.organizations);
   }
 
-  /** Fetch the primary organization profile without creating demo business data. */
+  /** Fetch the primary organization profile, creating only the required local record. */
   async getPrimaryOrganization(): Promise<OrganizationSchema> {
     const orgs = await this.getAll();
     if (orgs.length > 0 && orgs[0]) {
@@ -24,11 +24,38 @@ export class OrganizationRepository extends BaseRepository<OrganizationSchema> {
       return org;
     }
 
-    return {
+    const organization: OrganizationSchema = {
       id: DEFAULT_ORGANIZATION_ID,
-      name: "",
+      name: "Just Sly Enterprise",
+      currency: "NGN",
+      timezone: "Africa/Lagos",
       updated_at: Date.now(),
+      sync_status: "pending",
     };
+
+    await this.table.put(organization);
+    return organization;
+  }
+
+  /** Ensure the primary organization has a queued remote mutation. */
+  async ensurePrimaryOrganizationSync(): Promise<OrganizationSchema> {
+    const organization = await this.getPrimaryOrganization();
+    const organizationQueueItem = await db.syncQueue
+      .where("entityType")
+      .equals("organizations")
+      .and((item) => item.payload["id"] === organization.id)
+      .first();
+
+    if (!organizationQueueItem) {
+      await this.enqueueMutation("UPSERT", organization as unknown as Record<string, unknown>);
+    } else if (organizationQueueItem.status === "failed") {
+      await db.syncQueue.update(organizationQueueItem.id, {
+        status: "pending",
+        errorMessage: undefined,
+      });
+    }
+
+    return organization;
   }
 
   /**

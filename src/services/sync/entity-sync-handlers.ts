@@ -17,7 +17,39 @@ function toCleanStringOrNull(val: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-// 1. Branches Handler
+// 1. Organizations Handler
+SyncManager.registerHandler("organizations", async (operationType, payload) => {
+  if (operationType === "DELETE") {
+    const id = payload["id"] as string;
+    const { error } = await client.from("organizations").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+
+  const id = payload["id"] as string;
+  const remoteRecord = {
+    id,
+    name: payload["name"] || "Just Sly Enterprise",
+    code: toCleanStringOrNull(payload["code"]),
+    tax_id: toCleanStringOrNull(payload["tax_id"]),
+    currency: payload["currency"] || "NGN",
+    is_multi_branch_enabled: payload["is_multi_branch_enabled"] ?? true,
+    updated_at: new Date(
+      Number(payload["updated_at"] || payload["updatedAt"] || Date.now()),
+    ).toISOString(),
+  };
+
+  const { error } = await client.from("organizations").upsert(remoteRecord, {
+    onConflict: "id",
+  });
+  if (!error) {
+    await db.organizations.update(id, { sync_status: "synced" });
+  } else {
+    console.error("[Sync] Organizations upsert error:", error.message);
+  }
+  return { success: !error, error: error?.message };
+});
+
+// 2. Branches Handler
 SyncManager.registerHandler("branches", async (operationType, payload) => {
   if (operationType === "DELETE") {
     const id = payload["id"] as string;

@@ -26,14 +26,19 @@ export class SyncManager {
   }
 
   private static getDependencyEntityType(entityType: string): string | undefined {
+    if (entityType === "branches") return "organizations";
     if (["sale_items", "sale_payments", "sale_voids"].includes(entityType)) return "sales";
-    if ([
-      "wholesale_order_items",
-      "order_status_history",
-      "order_payments",
-      "payment_receipts",
-      "invoices",
-    ].includes(entityType)) return "wholesale_orders";
+    if (
+      [
+        "wholesale_order_items",
+        "order_status_history",
+        "order_payments",
+        "payment_receipts",
+        "invoices",
+      ].includes(entityType)
+    ) {
+      return "wholesale_orders";
+    }
     return undefined;
   }
 

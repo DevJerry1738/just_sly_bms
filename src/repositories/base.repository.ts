@@ -25,7 +25,11 @@ export abstract class BaseRepository<T extends { id: string }> {
   /**
    * Create a new record: stores locally in IndexedDB and enqueues CREATE mutation.
    */
-  async create(data: Omit<T, "id"> & { id?: string }, branchId?: string): Promise<T> {
+  async create(
+    data: Omit<T, "id"> & { id?: string },
+    branchId?: string,
+    dependency?: string,
+  ): Promise<T> {
     const record = {
       ...data,
       id: data.id ?? crypto.randomUUID(),
@@ -33,7 +37,12 @@ export abstract class BaseRepository<T extends { id: string }> {
     } as unknown as T;
 
     await this.table.put(record);
-    await this.enqueueMutation("CREATE", record as unknown as Record<string, unknown>, branchId);
+    await this.enqueueMutation(
+      "CREATE",
+      record as unknown as Record<string, unknown>,
+      branchId,
+      dependency,
+    );
     return record;
   }
 
@@ -85,8 +94,9 @@ export abstract class BaseRepository<T extends { id: string }> {
   protected async enqueueMutation(
     operationType: SyncOperationType,
     payload: Record<string, unknown>,
-    branchId?: string
+    branchId?: string,
+    dependency?: string,
   ): Promise<void> {
-    await SyncQueueService.enqueue(this.entityName, operationType, payload, { branchId });
+    await SyncQueueService.enqueue(this.entityName, operationType, payload, { branchId, dependency });
   }
 }

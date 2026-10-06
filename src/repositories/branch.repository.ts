@@ -1,6 +1,7 @@
 import { BaseRepository } from "./base.repository";
 import { db, type BranchSchema } from "@/database/schema";
 import { DomainEvents } from "@/services/events/domain-events";
+import { organizationRepository } from "./organization.repository";
 
 export class BranchRepository extends BaseRepository<BranchSchema> {
   constructor() {
@@ -36,12 +37,13 @@ export class BranchRepository extends BaseRepository<BranchSchema> {
   async createBranch(data: Partial<BranchSchema>): Promise<BranchSchema> {
     const count = (await this.getAll()).length;
     const code = data.code || `BR-${String(count + 1).padStart(3, "0")}`;
+    const organization = await organizationRepository.ensurePrimaryOrganizationSync();
 
     const newBranch: BranchSchema = {
       id: data.id || crypto.randomUUID(),
       code,
       name: data.name || "New Branch",
-      organizationId: data.organizationId || "default-org-001",
+      organizationId: data.organizationId || organization.id,
       email: data.email || "",
       phone: data.phone || "",
       address: data.address || "",
@@ -62,7 +64,7 @@ export class BranchRepository extends BaseRepository<BranchSchema> {
       sync_status: "pending",
     };
 
-    const saved = await this.create(newBranch);
+    const saved = await this.create(newBranch, undefined, organization.id);
     await DomainEvents.publish("BRANCH_CREATED", { entity: "Branch", entityId: saved.id, record: saved });
     return saved;
   }

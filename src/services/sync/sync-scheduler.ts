@@ -4,6 +4,7 @@ import "./entity-sync-handlers";
 import { SyncManager } from "./sync-manager";
 import { SyncQueueService } from "./sync-queue";
 import { db } from "@/database/schema";
+import { organizationRepository } from "@/repositories/organization.repository";
 import { supabase } from "@/integrations/supabase/client";
 
 const client = supabase as any;
@@ -50,26 +51,20 @@ export class SyncScheduler {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     try {
-      // 0. Ensure default organization exists in Supabase first to satisfy foreign key constraints
-      const { data: remoteOrgs } = await client.from("organizations").select("id");
-      const remoteOrgIds = new Set((remoteOrgs || []).map((o: any) => o.id));
-      const localOrgs = await db.organizations.toArray();
+      // 0. Ensure the organization prerequisite is processed before any branch catch-up.
+      await organizationRepository.ensurePrimaryOrganizationSync();
+      await SyncManager.processQueue(["organizations"]);
 
-      for (const org of localOrgs) {
-        if (org.sync_status === "pending" && !remoteOrgIds.has(org.id)) {
-          await client.from("organizations").upsert(
-            {
-              id: org.id,
-              name: org.name || "Just Sly Enterprise",
-              code: org.code || "ORG-001",
-              tax_id: org.tax_id || null,
-              currency: org.currency || "NGN",
-              is_multi_branch_enabled: true,
-              updated_at: new Date(Number(org.updated_at || Date.now())).toISOString(),
-            },
-            { onConflict: "id" }
-          );
-        }
+      const { data: remoteOrgs, error: orgErr } = await client
+        .from("organizations")
+        .select("id");
+      const remoteOrgIds = new Set(
+        (remoteOrgs || []) as Array<{ id: string }>,
+      );
+      if (orgErr || remoteOrgIds.size === 0) {
+        throw new Error(
+          `Organization prerequisite is unavailable: ${orgErr?.message || "no organization row found"}`,
+        );
       }
 
       const pendingItems = await SyncQueueService.getPendingItems();
@@ -80,6 +75,7 @@ export class SyncScheduler {
       if (!bErr) {
         const remoteBranchIds = new Set((remoteBranches || []).map((b: any) => b.id));
         const localBranches = await db.branches.toArray();
+        const organizationId = (await organizationRepository.getPrimaryOrganization()).id;
         for (const branch of localBranches) {
           if (branch.sync_status === "pending" && !remoteBranchIds.has(branch.id)) {
             const { error: upsertErr } = await client.from("branches").upsert(
@@ -87,7 +83,7 @@ export class SyncScheduler {
                 id: branch.id,
                 code: branch.code,
                 name: branch.name,
-                organization_id: branch.organizationId || "default-org-001",
+                organization_id: branch.organizationId || organizationId,
                 email: branch.email || null,
                 phone: branch.phone || null,
                 address: branch.address || null,
@@ -724,6 +720,7 @@ export class SyncScheduler {
   static async triggerSync(): Promise<void> {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
+    await SyncQueueService.requeueFailedForEntity("branches", "branches_organization_id_fkey");
     await SyncQueueService.requeueFailedForEntities([
       "wholesale_orders",
       "wholesale_order_items",
