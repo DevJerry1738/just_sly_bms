@@ -30,6 +30,9 @@ import { OpeningStockModal } from "./opening-stock-modal";
 import { AdjustmentModal } from "./adjustment-modal";
 import { clearLocalDatabase } from "@/database";
 import { inventoryAlertRepository } from "@/repositories/inventory-alert.repository";
+import { inventoryTransactionRepository } from "@/repositories/inventory-transaction.repository";
+import { SyncManager } from "@/services/sync/sync-manager";
+import { SyncScheduler } from "@/services/sync/sync-scheduler";
 import { countRelevantUnreadNotifications } from "./alerts-panel";
 import { db } from "@/database/schema";
 import type { BranchSchema } from "@/database/schema";
@@ -43,6 +46,7 @@ export function InventoryPage() {
   const canSelectBranch = isSuperAdmin;
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isResettingLocalData, setIsResettingLocalData] = useState(false);
+  const [isRecoveringOpeningStock, setIsRecoveringOpeningStock] = useState(false);
   const [alertBadgeCount, setAlertBadgeCount] = useState(0);
 
   // Modals
@@ -88,6 +92,45 @@ export function InventoryPage() {
     }
   };
 
+  const handleRecoverOpeningStock = async () => {
+    if (!branchId.trim()) return;
+    if (!window.confirm(`Assign existing opening-stock records with no branch to ${activeBranch?.name}?`)) return;
+
+    setIsRecoveringOpeningStock(true);
+    try {
+      const recoveredCount = await inventoryTransactionRepository.reassignUnassignedOpeningStock(branchId);
+      if (recoveredCount === 0) {
+        alert("No unassigned opening-stock records were found on this device.");
+        return;
+      }
+      const result = await SyncManager.processQueue([
+        "inventory_batches",
+        "inventory_transactions",
+        "inventory_balances",
+      ]);
+      await SyncScheduler.pullSync();
+      triggerRefresh();
+      const inventoryQueueItems = await db.syncQueue
+        .where("status")
+        .anyOf("pending", "syncing", "failed")
+        .toArray();
+      const remainingCount = inventoryQueueItems.filter(
+        (item) =>
+          ["inventory_batches", "inventory_transactions", "inventory_balances"].includes(item.entityType) &&
+          item.branchId === branchId,
+      ).length;
+      alert(
+        result.success && remainingCount === 0
+          ? `Recovered ${recoveredCount} opening-stock record(s) for ${activeBranch?.name}.`
+          : `Reassigned ${recoveredCount} record(s) locally for ${activeBranch?.name}; ${remainingCount || result.failedCount} sync item(s) remain queued or failed. Check sync status for details.`,
+      );
+    } catch (error) {
+      alert(`Failed to recover opening stock: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsRecoveringOpeningStock(false);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Page Header */}
@@ -107,6 +150,7 @@ export function InventoryPage() {
               onChange={(e) => setActiveBranchId(e.target.value)}
               className="h-9 px-3 py-1 text-sm rounded-md border border-input bg-background font-medium"
             >
+              <option value="" disabled>Select branch</option>
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name} ({b.code})
@@ -121,7 +165,7 @@ export function InventoryPage() {
 
           {canAdjust && (
             <>
-              <Button variant="outline" size="sm" onClick={() => setIsOpeningStockOpen(true)}>
+              <Button variant="outline" size="sm" onClick={() => setIsOpeningStockOpen(true)} disabled={!branchId.trim()}>
                 <Plus className="w-4 h-4 mr-1.5" /> Opening Stock
               </Button>
 
@@ -129,6 +173,17 @@ export function InventoryPage() {
                 <ArrowUpDown className="w-4 h-4 mr-1.5" /> Stock Adjustment
               </Button>
             </>
+          )}
+
+          {isSuperAdmin && branchId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleRecoverOpeningStock()}
+              disabled={isRecoveringOpeningStock}
+            >
+              {isRecoveringOpeningStock ? "Recovering..." : "Recover Unassigned Opening Stock"}
+            </Button>
           )}
 
           {import.meta.env.DEV && (

@@ -74,6 +74,121 @@ export interface RecordTransactionInput {
 }
 
 export class InventoryTransactionRepository {
+  async reassignUnassignedOpeningStock(branchId: string): Promise<number> {
+    const targetBranchId = branchId.trim();
+    if (!targetBranchId) throw new Error("A valid branch is required to recover opening stock.");
+
+    return db.transaction(
+      "rw",
+      [db.inventory_transactions, db.inventory_balances, db.inventory_batches, db.syncQueue],
+      async () => {
+        const transactions = await db.inventory_transactions
+          .filter((transaction) => transaction.type === "opening_stock" && !(transaction.branchId ?? "").trim())
+          .toArray();
+        if (transactions.length === 0) return 0;
+
+        const queueItems = await db.syncQueue.toArray();
+        const now = Date.now();
+        const affectedProducts = new Map<string, InventoryTransactionSchema[]>();
+        const affectedBatchIds = new Set<string>();
+
+        for (const transaction of transactions) {
+          const updatedTransaction = { ...transaction, branchId: targetBranchId, sync_status: "pending" as const };
+          await db.inventory_transactions.put(updatedTransaction);
+
+          if (transaction.batchId) {
+            const batch = await db.inventory_batches.get(transaction.batchId);
+            if (batch && !(batch.branchId ?? "").trim()) {
+              await db.inventory_batches.put({ ...batch, branchId: targetBranchId, sync_status: "pending" });
+              affectedBatchIds.add(batch.id);
+            }
+          }
+
+          const productTransactions = affectedProducts.get(transaction.productId) ?? [];
+          productTransactions.push(updatedTransaction);
+          affectedProducts.set(transaction.productId, productTransactions);
+        }
+
+        let queueOrder = 0;
+        const upsertQueueItem = async (
+          entityType: string,
+          record: Record<string, unknown>,
+          previousId?: string,
+        ) => {
+          const recordId = String(record["id"]);
+          const existing = queueItems.find((item) =>
+            item.entityType === entityType &&
+            (item.payload["id"] === recordId || (previousId && item.payload["id"] === previousId))
+          );
+          if (existing) {
+            await db.syncQueue.update(existing.id, {
+              operationType: entityType === "inventory_transactions" ? "CREATE" : "UPSERT",
+              payload: record,
+              branchId: targetBranchId,
+              status: "pending",
+              errorMessage: undefined,
+              timestamp: now + queueOrder++,
+            });
+            return;
+          }
+          await db.syncQueue.put({
+            id: crypto.randomUUID(),
+            entityType,
+            operationType: entityType === "inventory_transactions" ? "CREATE" : "UPSERT",
+            payload: record,
+            timestamp: now + queueOrder++,
+            status: "pending",
+            retryCount: 0,
+            priority: 1,
+            branchId: targetBranchId,
+          });
+        };
+
+        for (const batchId of affectedBatchIds) {
+          const batch = await db.inventory_batches.get(batchId);
+          if (batch) await upsertQueueItem("inventory_batches", batch as unknown as Record<string, unknown>);
+        }
+        for (const transaction of transactions) {
+          const updated = await db.inventory_transactions.get(transaction.id);
+          if (updated) await upsertQueueItem("inventory_transactions", updated as unknown as Record<string, unknown>);
+        }
+
+        for (const [productId, productTransactions] of affectedProducts) {
+          const oldBalanceId = balanceId(productId, "");
+          const oldBalance = await db.inventory_balances.get(oldBalanceId);
+          if (!oldBalance) continue;
+
+          const newBalanceId = balanceId(productId, targetBranchId);
+          const targetBalance = await db.inventory_balances.get(newBalanceId);
+          const quantityOnHand = (targetBalance?.quantityOnHand ?? 0) + oldBalance.quantityOnHand;
+          const totalCostValue = (targetBalance?.totalCostValue ?? 0) + oldBalance.totalCostValue;
+          const updatedBalance: InventoryBalanceSchema = {
+            ...oldBalance,
+            ...targetBalance,
+            id: newBalanceId,
+            productId,
+            branchId: targetBranchId,
+            quantityOnHand,
+            totalCostValue,
+            weightedAvgCost: quantityOnHand > 0 ? totalCostValue / quantityOnHand : 0,
+            lastTransactionId: productTransactions[productTransactions.length - 1].id,
+            updatedAt: now,
+            sync_status: "pending",
+          };
+          await db.inventory_balances.delete(oldBalanceId);
+          await db.inventory_balances.put(updatedBalance);
+          await upsertQueueItem(
+            "inventory_balances",
+            updatedBalance as unknown as Record<string, unknown>,
+            oldBalanceId,
+          );
+        }
+
+        return transactions.length;
+      },
+    );
+  }
+
   /**
    * Record an inventory transaction and atomically update the cached balance.
    * This is the ONLY permitted way to change stock quantities.

@@ -642,6 +642,31 @@ export class SyncScheduler {
         }
       }
 
+      // 7a. Pull append-only inventory ledger records without overwriting local work.
+      const { data: remoteTransactions, error: txnErr } = await client
+        .from("inventory_transactions")
+        .select("*");
+      if (!txnErr && remoteTransactions) {
+        for (const row of remoteTransactions) {
+          await putRemote(db.inventory_transactions, {
+            id: row.id,
+            type: row.type,
+            productId: row.product_id,
+            branchId: row.branch_id,
+            quantity: Number(row.quantity ?? 0),
+            baseUnit: row.base_unit,
+            unitCost: row.unit_cost == null ? null : Number(row.unit_cost),
+            referenceNumber: row.reference_number,
+            batchId: row.batch_id || null,
+            sessionId: row.session_id || null,
+            notes: row.notes || undefined,
+            performedBy: row.performed_by,
+            performedByName: row.performed_by_name || undefined,
+            timestamp: milliseconds(row.timestamp),
+          });
+        }
+      }
+
       // 8. Pull inventory batches
       const { data: remoteBatches, error: batErr } = await client.from("inventory_batches").select("*");
       if (!batErr && remoteBatches) {

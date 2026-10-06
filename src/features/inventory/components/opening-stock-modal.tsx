@@ -38,10 +38,15 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
 
   useEffect(() => {
     if (!isOpen) return;
+    const targetBranchId = branchId.trim();
+    if (!targetBranchId) {
+      setProducts([]);
+      return;
+    }
 
     async function loadProducts() {
       const activeProducts = (await productRepository.getAll()).filter((p) => p.status === "active");
-      const branchBalances = await inventoryBalanceRepository.getByBranch(branchId);
+      const branchBalances = await inventoryBalanceRepository.getByBranch(targetBranchId);
       const existingProductIds = new Set(branchBalances.map((b) => b.productId));
       const availableProducts = activeProducts.filter((product) => !existingProductIds.has(product.id));
       setProducts(availableProducts);
@@ -89,6 +94,11 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const targetBranchId = branchId.trim();
+    if (!targetBranchId) {
+      alert("Select a branch before recording opening stock.");
+      return;
+    }
     if (!selectedProduct) {
       alert("Please select a product.");
       return;
@@ -119,7 +129,7 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
       // Always create a batch record for opening stock to enable batch/FIFO tracking
       const batch = await inventoryBatchRepository.createBatch({
         productId: selectedProduct.id,
-        branchId,
+        branchId: targetBranchId,
         initialQuantity: baseUnitsQty,
         quantityOnHand: baseUnitsQty,
         manufactureDate: manufactureDate || undefined,
@@ -134,7 +144,7 @@ export function OpeningStockModal({ isOpen, onClose, onSuccess, branchId }: Open
       await inventoryTransactionRepository.recordTransaction({
         type: "opening_stock",
         productId: selectedProduct.id,
-        branchId,
+        branchId: targetBranchId,
         quantity: baseUnitsQty,
         baseUnit: selectedProduct.baseUnit,
         unitCost: cost,
