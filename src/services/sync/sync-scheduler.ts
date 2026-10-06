@@ -721,6 +721,10 @@ export class SyncScheduler {
     if (typeof navigator !== "undefined" && !navigator.onLine) return;
 
     await SyncQueueService.requeueFailedForEntity("branches", "branches_organization_id_fkey");
+    await SyncQueueService.requeueFailedForEntity(
+      "categories",
+      "No sync handler registered",
+    );
     await SyncQueueService.requeueFailedForEntities([
       "wholesale_orders",
       "wholesale_order_items",

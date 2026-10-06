@@ -86,14 +86,19 @@ export class CategoryRepository extends BaseRepository<CategorySchema> {
       sync_status: "pending",
     };
 
-    const saved = await this.create(category);
+    const saved = await this.create(category, undefined, category.parentId ?? undefined);
     await DomainEvents.publish("CATEGORY_CREATED", { entity: "Category", entityId: saved.id, record: saved });
     return saved;
   }
 
   async updateCategory(id: string, updates: Partial<CategorySchema>): Promise<CategorySchema> {
     const before = await this.getById(id);
-    const updated = await this.update(id, { ...updates, updatedAt: Date.now(), sync_status: "pending" });
+    const updated = await this.update(
+      id,
+      { ...updates, updatedAt: Date.now(), sync_status: "pending" },
+      undefined,
+      updates.parentId ?? undefined,
+    );
     await DomainEvents.publish("CATEGORY_UPDATED", { entity: "Category", entityId: id, before, after: updated });
     return updated;
   }

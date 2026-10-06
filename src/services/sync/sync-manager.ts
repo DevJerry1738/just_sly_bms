@@ -27,6 +27,7 @@ export class SyncManager {
 
   private static getDependencyEntityType(entityType: string): string | undefined {
     if (entityType === "branches") return "organizations";
+    if (entityType === "categories") return "categories";
     if (["sale_items", "sale_payments", "sale_voids"].includes(entityType)) return "sales";
     if (
       [

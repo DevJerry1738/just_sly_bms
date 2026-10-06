@@ -49,7 +49,12 @@ export abstract class BaseRepository<T extends { id: string }> {
   /**
    * Update an existing record locally in IndexedDB and enqueue UPDATE mutation.
    */
-  async update(id: string, updates: Partial<T>, branchId?: string): Promise<T> {
+  async update(
+    id: string,
+    updates: Partial<T>,
+    branchId?: string,
+    dependency?: string,
+  ): Promise<T> {
     const existing = await this.getById(id);
     if (!existing) {
       throw new Error(`[Repository] ${this.entityName} with id "${id}" not found`);
@@ -62,7 +67,12 @@ export abstract class BaseRepository<T extends { id: string }> {
     } as T;
 
     await this.table.put(updatedRecord);
-    await this.enqueueMutation("UPDATE", updatedRecord as unknown as Record<string, unknown>, branchId);
+    await this.enqueueMutation(
+      "UPDATE",
+      updatedRecord as unknown as Record<string, unknown>,
+      branchId,
+      dependency,
+    );
     return updatedRecord;
   }
 

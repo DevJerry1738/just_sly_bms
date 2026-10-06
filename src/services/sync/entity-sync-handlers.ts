@@ -49,7 +49,36 @@ SyncManager.registerHandler("organizations", async (operationType, payload) => {
   return { success: !error, error: error?.message };
 });
 
-// 2. Branches Handler
+// 2. Categories Handler
+SyncManager.registerHandler("categories", async (operationType, payload) => {
+  if (operationType === "DELETE") {
+    const id = payload["id"] as string;
+    const { error } = await client.from("categories").delete().eq("id", id);
+    return { success: !error, error: error?.message };
+  }
+
+  const id = payload["id"] as string;
+  const remoteRecord = {
+    id,
+    code: payload["code"],
+    name: payload["name"],
+    parent_id: toCleanStringOrNull(payload["parentId"]),
+    description: toCleanStringOrNull(payload["description"]),
+    status: payload["status"] || "active",
+    created_at: new Date(Number(payload["createdAt"] || Date.now())).toISOString(),
+    updated_at: new Date(Number(payload["updatedAt"] || Date.now())).toISOString(),
+  };
+
+  const { error } = await client.from("categories").upsert(remoteRecord, {
+    onConflict: "id",
+  });
+  if (!error) {
+    await db.categories.update(id, { sync_status: "synced" });
+  }
+  return { success: !error, error: error?.message };
+});
+
+// 3. Branches Handler
 SyncManager.registerHandler("branches", async (operationType, payload) => {
   if (operationType === "DELETE") {
     const id = payload["id"] as string;
