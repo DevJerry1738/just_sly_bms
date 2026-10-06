@@ -47,13 +47,7 @@ export function ProductsPage() {
         categoryRepository.getActiveCategories(),
         unitOfMeasureRepository.getActiveUnits(),
       ]);
-      if (!activeBranch?.id) {
-        setProducts([]);
-        setCategories(cats);
-        setUnits(uoms);
-        setPackagingMap({});
-        return;
-      }
+
       setProducts(prods);
       setCategories(cats);
       setUnits(uoms);
